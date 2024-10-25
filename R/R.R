@@ -3167,7 +3167,6 @@ EffectAnalysis <- function(dataset){
     ungroup() %>%
     dplyr::select(-Sample) %>%
     rstatix::cor_test(vars = !dplyr::contains("PC"), vars2 = !dplyr::contains("PC")) %>%
-    rstatix::adjust_pvalue(method = "fdr") %>%
     ## Filter out NA correlations
     dplyr::filter(!is.na(cor))
 
