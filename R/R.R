@@ -2576,7 +2576,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       ## Changing Legend title
       name = "z-score Int",
       ## naming Plot
-      column_title = paste(plotname, "Supervised Heat map clustered by", clustDist)
+      column_title = paste(plotname)
     )
   } else if (tolower(method) == "unsupervised") {
     HeatMapPlot <- ComplexHeatmap::Heatmap(
@@ -2597,7 +2597,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       ## Change legend title
       name = "z-score Int",
       ## naming Plot
-      column_title = paste("Unsupervised Heat map", plotname, "clustered by", clustDist)
+      column_title = paste(plotname)
     )
   } else {
     stop("Invalid method. Choose either 'supervised' or 'unsupervised'.")
