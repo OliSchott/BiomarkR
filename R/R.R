@@ -1792,13 +1792,13 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   if("Protein" %in% colnames(dataset)){
 
-    Heatmap <- HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F)
+    Heatmap <- HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
 
   }
 
   if("Peptide" %in% colnames(dataset)){
 
-    HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F)
+    HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
 
 
   }
@@ -1876,9 +1876,8 @@ FisherTest <- function(dataset, plotname = ""){
 
   Results <- dplyr::bind_rows(Results) %>%
     ## Adjusting p-values for multiple testing
-    dplyr::mutate(Gene = stringr::str_split_i(Peptide, pattern = "_", 2)) %>%
-    dplyr::mutate(p.adj = p / length(unique(Gene))) %>%
-
+    dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
+    adjust_pvalue(method = "BH") %>%
     dplyr::arrange(p.adj) %>%
     dplyr::mutate(Direction = dplyr::if_else(OR > 1, "Up", "Down")) %>%
     dplyr::mutate(Direction = dplyr::if_else(p.adj > 0.05, "NotSignificant", Direction)) %>%
@@ -1919,8 +1918,9 @@ FisherTest <- function(dataset, plotname = ""){
       vjust = 0.5, hjust = -0.2, size = 3, angle = 30
     ) +
     ## Adding labels and title
-    ggplot2::ggtitle(paste("Volcano plot Wilcox Test", plotname)) +
+    ggplot2::ggtitle(paste("Volcano plot Fisher Test", plotname)) +
     ggplot2::xlab(paste("Odds ratio")) +
+    ggplot2::ylab("-log10(p.adj)") +
     ggplot2::theme_light(base_size = 13)
 
   return(list(Results = Results, Plot = vulcanoPlot))
@@ -2273,6 +2273,17 @@ LogisticRegressionSingleFeature <- function(dataset, PoI){
 #' @export
 AUCs <- function(dataset, PoIs, plotname = "") {
 
+  ## Calculate difference betwen mean exrpession in status
+  ### Check if dataset has more than 2 unique entries in Status
+  if(length(unique(dataset$Status)) > 2){
+    stop("More than 2 unique entries in Status")
+  } else {
+
+    Status1 <- unique(dataset$Status)[1]
+    Status2 <- unique(dataset$Status)[2]
+
+  }
+
   # Create an empty data frame to store results
   AUCResults <- data.frame(PoI = character(0), AUC = numeric(0))
 
@@ -2314,11 +2325,48 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     ggplot2::xlab(label = "PoI") +
     ggplot2::geom_hline(yintercept = 0.5)
 
+  if("Protein" %in% colnames(dataset)){
+
+    Diff <- dataset %>%
+      group_by(Protein) %>%
+      summarise(Diff = mean(Intensity[Status == Status1], na.rm = T) - mean(Intensity[Status == Status2], na.rm = T))
+
+  }
+
+  if("Peptide" %in% colnames(dataset)){
+
+    Diff <- dataset %>%
+      group_by(Peptide) %>%
+      summarise(Diff = mean(Intensity[Status == Status1], na.rm = T) - mean(Intensity[Status == Status2], na.rm = T))
+
+  }
+
+  ## Combine the two dataframes
+  Vulcanoplotdata <- merge(Diff, AUROCs, by = "Protein") %>%
+    ## Add AUC to 0.5 if value is less than 0.5
+    mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
+    mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
+    arrange(desc(AUC))
+
+  VulcanoPlot <- ## volcano plot of Resutls
+    ggplot(Results, aes(x = Diff, y = AUC)) +
+    geom_point(aes(col = ifelse(Direction == "Up", "blue", "red"))) +
+    geom_text_repel(aes(label = Protein), box.padding = 0.5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ## rename axis
+    xlab(paste("Fold Change in ", Status1)) +
+    ylab("AUC") +
+    ## add title
+    ggtitle(paste("AUCs of PoIs", plotname)) +
+    ## remove legend
+    theme(legend.position = "none")
+
   # Create output list containing results and plot
   Output <- list()
   Output$results <- AUCResults
   Output$plot <- AUCPlot
-
+  Output$VulcanoPlot <- VulcanoPlot
   return(Output)
 }
 
