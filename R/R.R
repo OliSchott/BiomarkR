@@ -1936,6 +1936,7 @@ FisherTest <- function(dataset, plotname = ""){
 #' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
 #' @param method The method to be used for the Heatmap (unsupervised, supervised)
 #' @return A list object containing the results of the ANOVA, the significant features and a heatmap
+#' @export
 ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsupervised"){
 
   ## Initializing Dataframe
@@ -2480,9 +2481,12 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @param row_split A numeric indicating into how many clusters the rows should be split
 #' @param cluster_columns Logical value indicating if columns should be clustered at all
 #' @param Annotations comumn names of the dataset that should be annotated
+#' @param ColPalette The color palette to be used for the annotations (Specified using the names of a color palette from the RColorBrewer package): https://www.aptech.com/releases/gauss18/graphics-updates/color-brewer-palettes/
+#' @param contColors The colors to be used for continuous annotations of numeric columns (Input is a vector of colors, example c("green", "red"))
+
 #' @return A Heatmap object
 #' @export
-HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL) {
+HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "Set1", contColors = c("yellow", "purple")) {
   ## creating heat map Data
   if ("Protein" %in% colnames(dataset)) {
     HeatMapData <- dataset %>%
@@ -2525,14 +2529,26 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
     stop("Dataset must contain either 'Protein' or 'Peptide' column.")
   }
 
+
   # Function to generate a color palette for annotations
   generate_annotation_colors <- function(annotation_levels) {
-    # Create a color palette
-    palette <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Dark2"))
-    colors <- palette(length(annotation_levels))
-    names(colors) <- annotation_levels
+    # Check if the annotation levels are numeric
+    if (is.numeric(annotation_levels)) {
+      # Generate a continuous color gradient for numeric data
+      min_val <- min(annotation_levels, na.rm = TRUE)
+      max_val <- max(annotation_levels, na.rm = TRUE)
+      colors <- colorRamp2(c(min_val, max_val), c(contColors[1], contColors[2]))
+    } else {
+      # For categorical data, use qualitative color palette
+      nColors <- ifelse(length(annotation_levels) > 3, length(annotation_levels), 3)
+      palette <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(nColors, ColPalette))
+      colors <- palette(length(annotation_levels))
+      names(colors) <- annotation_levels
+    }
+
     return(colors)
   }
+
 
   # Generate annotation colors and create annotation list dynamically
   annotation_list <- list()
@@ -2579,6 +2595,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       column_title = paste(plotname)
     )
   } else if (tolower(method) == "unsupervised") {
+
     HeatMapPlot <- ComplexHeatmap::Heatmap(
       HeatMapDataQuant,
       ## Annotations Stuff
