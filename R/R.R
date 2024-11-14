@@ -2341,15 +2341,17 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
   }
 
+  colnames(AUCResults)[1] <- "Protein"
+
   ## Combine the two dataframes
-  Vulcanoplotdata <- merge(Diff, AUROCs, by = "Protein") %>%
+  Vulcanoplotdata <- merge(Diff, AUCResults, by = "Protein") %>%
     ## Add AUC to 0.5 if value is less than 0.5
     mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
     mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
     arrange(desc(AUC))
 
-  VulcanoPlot <- ## volcano plot of Resutls
-    ggplot(Results, aes(x = Diff, y = AUC)) +
+  VulcanoPlot <- ## volcano plot of Results
+    ggplot(Vulcanoplotdata, aes(x = Diff, y = AUC)) +
     geom_point(aes(col = ifelse(Direction == "Up", "blue", "red"))) +
     geom_text_repel(aes(label = Protein), box.padding = 0.5) +
     theme_minimal() +
