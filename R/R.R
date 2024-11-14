@@ -1752,7 +1752,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       dplyr::group_by(Status, Peptide) %>%
       dplyr::summarise(meanInt = mean(Intensity, na.rm = TRUE)) %>%
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
-      dplyr::mutate(FC = (.[[Status2]] - .[[Status1]]))
+      dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
 
     VulconaoPlotData <- merge(WResults, FoldChangeData, by = "Peptide") %>%
       dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
@@ -1798,7 +1798,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   if("Peptide" %in% colnames(dataset)){
 
-    HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
+    Heatmap <- HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
 
 
   }
@@ -1842,8 +1842,8 @@ FisherTest <- function(dataset, plotname = ""){
 
     PoIs <- unique(dataset$Peptide)
 
-    DataForFisher <- dataset %>%
-      dplyr::filter(Peptide %in% PoIs) %>%
+    DataForFisher <- dataset %>% mutate(Protein = Peptide) %>%
+      dplyr::filter(Protein %in% PoIs) %>%
       dplyr::select(Sample, Protein, Intensity, Status) %>%
       tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
       tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Protein", values_to = "Intensity")
@@ -1877,7 +1877,7 @@ FisherTest <- function(dataset, plotname = ""){
   Results <- dplyr::bind_rows(Results) %>%
     ## Adjusting p-values for multiple testing
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
-    adjust_pvalue(method = "BH") %>%
+    rstatix::adjust_pvalue(method = "BH") %>%
     dplyr::arrange(p.adj) %>%
     dplyr::mutate(Direction = dplyr::if_else(OR > 1, "Up", "Down")) %>%
     dplyr::mutate(Direction = dplyr::if_else(p.adj > 0.05, "NotSignificant", Direction)) %>%
@@ -2531,7 +2531,6 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @param Annotations comumn names of the dataset that should be annotated
 #' @param ColPalette The color palette to be used for the annotations (Specified using the names of a color palette from the RColorBrewer package): https://www.aptech.com/releases/gauss18/graphics-updates/color-brewer-palettes/
 #' @param contColors The colors to be used for continuous annotations of numeric columns (Input is a vector of colors, example c("green", "red"))
-
 #' @return A Heatmap object
 #' @export
 HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "Set1", contColors = c("yellow", "purple")) {
@@ -2676,7 +2675,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
 #' @title MultiLogisticRegression
 #' @description Calculates the logistic regression for multiple features in the specified dataset.
 #' @param dataset The dataset to be tested
-#' @param PoIs A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
+#' @param PoIs A vector containing the Proteins of interest. Example: c("Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
 #' @param nIterations The number of iterations for the cross validation
 #' @return A list object containing the results of the logistic regression calculations and the ROC plot
 #' @export
@@ -3204,7 +3203,8 @@ EffectAnalysis <- function(dataset){
     rstatix::cor_test(vars = dplyr::contains("PC"), vars2 = !dplyr::contains("PC")) %>%
     dplyr::mutate(var1 = ifelse(var1 == "PC1", paste("PC1 (", round(ExplainedVariances[1], digits = 2)*100, " %)", sep = ""), var1),
                   var1 = ifelse(var1 == "PC2", paste("PC2 (", round(ExplainedVariances[2], digits = 2)*100, " %)", sep = ""), var1),
-                  var1 = ifelse(var1 == "PC3", paste("PC3 (", round(ExplainedVariances[3], digits = 2)*100, " %)", sep = ""), var1))
+                  var1 = ifelse(var1 == "PC3", paste("PC3 (", round(ExplainedVariances[3], digits = 2)*100, " %)", sep = ""), var1)) %>%
+    rstatix::adjust_pvalue()
 
   ## plot results
 
