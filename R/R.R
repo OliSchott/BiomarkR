@@ -2273,6 +2273,7 @@ LogisticRegressionSingleFeature <- function(dataset, PoI){
 #' @export
 AUCs <- function(dataset, PoIs, plotname = "") {
 
+  dataset <- dataset %>% dplyr::arrange(Status)
   ## Calculate difference betwen mean exrpession in status
   ### Check if dataset has more than 2 unique entries in Status
   if(length(unique(dataset$Status)) > 2){
@@ -2356,11 +2357,13 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     geom_text_repel(aes(label = Protein), box.padding = 0.5) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ## fix y axis from 0 to 1
+    scale_y_continuous(limits = c(0.5, 1)) +
     ## rename axis
     xlab(paste("Fold Change in ", Status1)) +
     ylab("AUC") +
     ## add title
-    ggtitle(paste("AUCs of PoIs", plotname)) +
+    ggtitle(plotname) +
     ## remove legend
     theme(legend.position = "none")
 
@@ -3856,9 +3859,10 @@ SVM <- function(dataset, PoIs) {
 #' @description Generalized linear model for the specified dataset.
 #' @param dataset The dataset to be tested
 #' @param PoIs A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
+#' @param crossvalidation A boolean value indicating whether to use cross-validation> I recommend false for desriptive analysese and true for predictife tasks
 #' @return A list object containing the results of the GLM model, the confusion matrix and the ROC plot and the AUC if the dataset has 2 classes
 #' @export
-GLM <- function(dataset, PoIs) {
+GLM <- function(dataset, PoIs, crossvalidation = F) {
 
   ## Error message if more than 2 classes, stop execution
   if (length(base::unique(dataset$Status)) > 2) {
@@ -3890,43 +3894,42 @@ GLM <- function(dataset, PoIs) {
     base::message("Missing values in Data, please impute or remove them")
   }
 
-  ## make train control for two class summary (10 x cross-validation)
-  train_control <- caret::trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = caret::twoClassSummary, savePredictions = TRUE)
+  ## make train control for no resampling
+  train_control <- caret::trainControl(method = ifelse(crossvalidation == T, "cv", "none"),
+                                       number = ifelse(crossvalidation == T, 10, NA) ,
+                                       classProbs = TRUE, summaryFunction = caret::twoClassSummary,
+                                       savePredictions = TRUE)
 
   ## train the model
   glm_model <- caret::train(Status ~ ., data = MLData, method = "glm", trControl = train_control)
 
-  ## extract confusion matrix
-  Confusion_Matrix <- caret::confusionMatrix(glm_model)
+  ## Make predictions on the training data
+  predictions <- predict(glm_model, MLData)
+  actuals <- factor(MLData$Status)
 
-
-  # Extract predictions and actual outcomes
-  predictions <- glm_model$pred[3] %>% pull()   # Predicted probabilities
-  actuals <- glm_model$pred$obs        # Actual outcomes
-
-  # Ensure predictions are numeric
-  predictions <- as.numeric(predictions)
-
-  # Ensure actuals are a factor
-  actuals <- factor(actuals, levels = levels(actuals))
+  ## Compute confusion matrix
+  Confusion_Matrix <- ifelse(crossvalidation == F,
+                             caret::confusionMatrix(predictions, actuals),
+                             caret::confusionMatrix(glm_model))
 
   # Generate ROC curve
-  suppressMessages(suppressWarnings(roc_curve <- pROC::roc(response = actuals, predictor = predictions, levels = base::levels(actuals))))
+  probabilities <- predict(glm_model, MLData, type = "prob")[, 2]  # Predicted probabilities for the positive class
 
+  # Ensure actuals are a factor
+  actuals <- factor(actuals, levels = base::levels(actuals))
+
+  # Generate ROC curve
+  suppressMessages(suppressWarnings(roc_curve <- pROC::roc(response = actuals, predictor = probabilities, levels = base::levels(actuals))))
 
   ## plot ROC curve using ggplot
   AUC <- base::round(pROC::auc(roc_curve), 2)
-
-  ## get sensitivity and specificity from roc_curve
-  ## plot ROC curve using ggplot
 
   roc_plot <- pROC::ggroc(roc_curve, legacy.axes = TRUE) +
     ggplot2::ggtitle("ROC Curve") +
     ggplot2::theme_minimal() +
     ## add 1:1 line (red, dashed)
     ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-    ggplot2::ggtitle("ROC Curve", subtitle = base::paste("AUC =", AUC))
-
+    ggplot2::ggtitle("ROC Curve", subtitle = base::paste("AUC =", AUC, ifelse(crossvalidation == F, "", "| 10x cross validated")))
 
   ## Create a list of all the output
   output <- base::list(Confusion_Matrix = Confusion_Matrix,
