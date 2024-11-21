@@ -4,7 +4,13 @@
 \alias{WTest}
 \title{WTest}
 \usage{
-WTest(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean")
+WTest(
+  dataset,
+  plotname = "",
+  method = "unsupervised",
+  clustDist = "euclidean",
+  p.adj.method = "BH"
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -14,6 +20,8 @@ WTest(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean")
 \item{method}{The method to be used for the Heatmap (unsupervised, supervised)}
 
 \item{clustDist}{The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")}
+
+\item{p.adj.method}{The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")}
 }
 \value{
 A list object containing the results of the Wilcox test, the significant features and a volcano plot

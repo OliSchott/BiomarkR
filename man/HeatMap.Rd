@@ -15,7 +15,9 @@ HeatMap(
   column_split = NULL,
   row_split = NULL,
   cluster_columns = TRUE,
-  Annotations = NULL
+  Annotations = NULL,
+  ColPalette = "Set1",
+  contColors = c("yellow", "purple")
 )
 }
 \arguments{
@@ -40,6 +42,10 @@ HeatMap(
 \item{cluster_columns}{Logical value indicating if columns should be clustered at all}
 
 \item{Annotations}{comumn names of the dataset that should be annotated}
+
+\item{ColPalette}{The color palette to be used for the annotations (Specified using the names of a color palette from the RColorBrewer package): https://www.aptech.com/releases/gauss18/graphics-updates/color-brewer-palettes/}
+
+\item{contColors}{The colors to be used for continuous annotations of numeric columns (Input is a vector of colors, example c("green", "red"))}
 }
 \value{
 A Heatmap object

@@ -9,7 +9,7 @@ MultiLogisticRegression(dataset, PoIs, nIterations = 10)
 \arguments{
 \item{dataset}{The dataset to be tested}
 
-\item{PoIs}{A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))}
+\item{PoIs}{A vector containing the Proteins of interest. Example: c("Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))}
 
 \item{nIterations}{The number of iterations for the cross validation}
 }

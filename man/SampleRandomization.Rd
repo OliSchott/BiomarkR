@@ -9,7 +9,7 @@ SampleRandomization(df, group_vars, IDColumn)
 \arguments{
 \item{df}{The dataset to be randomized}
 
-\item{group_vars}{The grouping variables}
+\item{group_vars}{The vector containing the grouping variables}
 
 \item{IDColumn}{The column containing the sample IDs}
 }
