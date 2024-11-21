@@ -16,15 +16,12 @@
 #' @import rstatix
 #' @import stats
 #' @import circlize
-#' @import alakazam
 #' @import umap
 #' @import stringi
 #' @import gtools
 #' @import seqinr
 #' @import sva
 #' @import dendextend
-#' @import DESeq2
-#' @import DEGreport
 #' @import magick
 #' @import STRINGdb
 #' @import MLmetrics
@@ -1622,9 +1619,10 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param plotname The name to be displayed on created plots
 #' @param method The method to be used for the Heatmap (unsupervised, supervised)
 #' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
+#' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @return A list object containing the results of the Wilcox test, the significant features and a volcano plot
 #' @export
-WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean") {
+WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH") {
   datasetW <- dataset %>% dplyr::arrange(Status)
 
   Status1 <- unique(datasetW$Status)[1] %>% as.character()
@@ -1653,7 +1651,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       dplyr::filter(Protein %in% filter$Protein) %>%
       dplyr::group_by(Protein) %>%
       rstatix::wilcox_test(Intensity ~ Status, detailed = TRUE) %>%
-      rstatix::adjust_pvalue(method = "BH") %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
       dplyr::mutate(
         UniprotID = stringr::str_split_i(Protein, pattern = "_", 1),
         Gene = stringr::str_split_i(Protein, pattern = "_", 2),
