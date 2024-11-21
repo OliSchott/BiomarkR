@@ -1710,7 +1710,9 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       ) +
       ggplot2::ggtitle(paste("Volcano plot Wilcox Test", plotname)) +
       ggplot2::xlab(paste("Fold change in", unique(WResults$group1))) +
-      ggplot2::theme_light(base_size = 13)
+      ggplot2::theme_light(base_size = 13) +
+      ## rename y axis
+      ggplot2::ylab(ifelse(p.adj.method != "none", "log10 (p.adj)", "log10 (p)"))
   }
   if("Peptide" %in% colnames(dataset)) {
     ## Making sure we have at least 2 Observations per group
@@ -1782,7 +1784,8 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       ) +
       ggplot2::ggtitle(paste("Volcano plot Wilcox Test", plotname)) +
       ggplot2::xlab(paste("Fold change in", unique(WResults$group1))) +
-      ggplot2::theme_light(base_size = 13)
+      ggplot2::theme_light(base_size = 13) +
+      ggplot2::ylab(ifelse(p.adj.method != "none", "log10 (p.adj)", "log10 (p)"))
   }
 
   ## plotting Heatmap using sigificant Proteins or peptides
@@ -2345,25 +2348,26 @@ AUCs <- function(dataset, PoIs, plotname = "") {
   ## Combine the two dataframes
   Vulcanoplotdata <- merge(Diff, AUCResults, by = "Protein") %>%
     ## Add AUC to 0.5 if value is less than 0.5
-    mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
-    mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
-    arrange(desc(AUC))
+    dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
+    dplyr::mutate(Gene = str_split_i(Protein, "_", 2)) %>%
+    dplyr::mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
+    dplyr::arrange(desc(AUC))
 
   VulcanoPlot <- ## volcano plot of Results
-    ggplot(Vulcanoplotdata, aes(x = Diff, y = AUC)) +
-    geom_point(aes(col = ifelse(Direction == "Up", "blue", "red"))) +
-    geom_text_repel(aes(label = Protein), box.padding = 0.5) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ggplot2::ggplot(Vulcanoplotdata, aes(x = Diff, y = AUC)) +
+    ggplot2::geom_point(aes(col = ifelse(Direction == "Up", "blue", "red"))) +
+    ggrepel::geom_text_repel(aes(label = Gene), box.padding = 0.5) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
     ## fix y axis from 0 to 1
-    scale_y_continuous(limits = c(0.5, 1)) +
+    ggplot2::scale_y_continuous(limits = c(0.5, 1)) +
     ## rename axis
-    xlab(paste("Fold Change in ", Status1)) +
-    ylab("AUC") +
+    ggplot2::xlab(paste("Fold Change in ", Status1)) +
+    ggplot2::ylab("AUC") +
     ## add title
-    ggtitle(plotname) +
+    ggplot2::ggtitle(plotname) +
     ## remove legend
-    theme(legend.position = "none")
+    ggplot2::theme(legend.position = "none")
 
   # Create output list containing results and plot
   Output <- list()
