@@ -8,7 +8,8 @@ KruskalTest(
   dataset,
   plotname = "",
   clustDist = "euclidean",
-  method = "unsupervised"
+  method = "unsupervised",
+  p.adj.method = "BH"
 )
 }
 \arguments{
@@ -18,7 +19,8 @@ KruskalTest(
 
 \item{clustDist}{The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")}
 
-\item{method}{The method to be used for the Heatmap (unsupervised, supervised)}
+\item{method}{The method to be used for the Heatmap (unsupervised, supervised)
+#' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")}
 }
 \value{
 A list object containing the results of the Kruskal test, the significant features and a heatmap

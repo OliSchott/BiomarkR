@@ -2118,9 +2118,10 @@ ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsu
 #' @param plotname The name to be displayed on created plots
 #' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
 #' @param method The method to be used for the Heatmap (unsupervised, supervised)
+#' #' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @return A list object containing the results of the Kruskal test, the significant features and a heatmap
 #' @export
-KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsupervised"){
+KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsupervised", p.adj.method = "BH"){
 
 
   ## Initializing Dataframe
@@ -2139,7 +2140,7 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
       drop_na(Intensity) %>%
       dplyr::group_by(Protein) %>%
       rstatix::kruskal_test(Intensity ~ Status) %>%
-      rstatix::adjust_pvalue(method = "BH") %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
       tidyr::separate(Protein, into = c("Uniprot", "Gene"), sep = "_", remove = F)
 
     KruskalSignificantFeatures <- kruskalResults %>%
@@ -2156,7 +2157,7 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
       drop_na(Intensity) %>%
       dplyr::group_by(Peptide) %>%
       rstatix::kruskal_test(Intensity ~ Status) %>%
-      rstatix::adjust_pvalue(method = "BH") %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
       tidyr::separate(Peptide, into = c("Uniprot", "Gene"), sep = "_", remove = F)
 
     KruskalSignificantFeatures <- kruskalResults %>%
@@ -3198,8 +3199,10 @@ EffectAnalysis <- function(dataset){
   for(i in 1 : ncol(CorrelationData)){
 
     if(!is.numeric(CorrelationData[[i]])){
+      ## get unique Entries of the column
+      uniqueEntries <- unique(CorrelationData[[i]])
       ## make factor
-      CorrelationData[[i]] <- as.numeric(factor(CorrelationData[[i]]))
+      CorrelationData[[i]] <- as.numeric(factor(CorrelationData[[i]], levels = uniqueEntries))
     }
   }
 
@@ -3238,6 +3241,7 @@ EffectAnalysis <- function(dataset){
     ungroup() %>%
     dplyr::select(-Sample) %>%
     rstatix::cor_test(vars = !dplyr::contains("PC"), vars2 = !dplyr::contains("PC")) %>%
+    rstatix::adjust_pvalue(method = "BH") %>%
     ## Filter out NA correlations
     dplyr::filter(!is.na(cor))
 
@@ -3252,7 +3256,7 @@ EffectAnalysis <- function(dataset){
   CorrMatrixPlot <- ComplexHeatmap::Heatmap(CorrMatrix, name = "correlation", column_title = "Correlation between clinical variables")
 
 
-  output <- list(CorResults, EffectPlot = EffectPlot, PCA = PCA, EffectCorrelationsPlot = CorrMatrixPlot)
+  output <- list(CorResults, EffectPlot = EffectPlot, PCA = PCA, EffectCorrelationsPlot = CorrMatrixPlot, CorrResultsClin = CorrResultsClin)
 
   return(output)
 }
@@ -3601,10 +3605,14 @@ PLSDA <- function(dataset, plotname = "", PoIs){
   ## make a list of outputs
   output <- list(optimization_plot = optimization_plot,
                  Confusion_Matrix = Confusion_Matrix,
-                 roc_plot = roc_plot,
                  scores_plot = scores_plot,
                  scores_plot_3D = scores_plot_3D,
                  Model = plsda_model)
+
+  ## Include ROC plot for 2 classes
+  if(length(base::unique(MLData$Status)) == 2){
+    output$roc_plot <- roc_plot
+  }
 
   return(output)
 }
