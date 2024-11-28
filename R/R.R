@@ -567,6 +567,44 @@ nObsPerFeature <- function(dataset, n = 10){
   return(invisible(results))
 }
 
+## filter out every Protein with less than n observations in a specified grouping variable
+## add roxygen comments
+#' @title nObsPerGroup
+#' @description This pipeline friendly function filters out every Protein with less than n observations in a specified grouping variable
+#' @param dataset The dataset to be filtered
+#' @param groupVar The grouping variable (Input without quotation makrs)
+#' @param n The number of observations
+#' @return The filtered dataset
+#' @export
+nObsPerGroup <- function(dataset, groupVar, n = 10) {
+
+  ## Error if groupVar is not a column name of dataset
+  if (!deparse(substitute(groupVar)) %in% colnames(dataset)) {
+    stop("groupVar must be a column name of dataset")
+  }
+
+  Filter <- dataset %>%
+    dplyr::group_by({{groupVar}}, Protein) %>%
+    dplyr::summarise(nObs = n()) %>%
+    dplyr::ungroup() %>%
+    tidyr::pivot_wider(names_from = {{groupVar}}, values_from = nObs) %>%
+    ## convert so True if > n
+    dplyr::mutate(across(-Protein, ~ . > n)) %>%
+    ## calculate row sum if True == 1
+    dplyr::mutate(Total = rowSums(select(., -Protein))) %>%
+    ## filter for rows where Total == ncolums - 2
+    dplyr::filter(Total == ncol(.) - 2) %>%
+    ## get Protein names
+    dplyr::pull(Protein)
+
+  FilteredData <- dataset %>%
+    dplyr::filter(Protein %in% Filter)
+
+
+  return(FilteredData)
+}
+
+
 ## Imputation of missing value (default method = "mean")
 ## add roxygen comments
 #' @title ImputeFeatureIntensity
