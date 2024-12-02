@@ -2960,6 +2960,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
 
 
   }
+
   if("Peptide" %in% colnames(dataset)){
 
     PCAData <- dataset %>%
@@ -2980,124 +2981,142 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
   }
   ## Plotting Results (optional)
 
-    ## Score Plot
-    PCAPlotData <- merge(PCA@scores, PCAData , by = 0)
-    ## splitting into three dataframes for plotting reasons
-    ## Only PC1 and PC 2
-    PCAPlotData12 <- PCAPlotData %>%
-      select(-c("PC3")) %>%
-      mutate(facet = "PC1 on PC2")
-    colnames(PCAPlotData12)[2:3] <- c("PlotPC1", "PlotPC2")
+  ## Score Plot
+  PCAPlotData <- merge(PCA@scores, PCAData , by = 0)
+  ## splitting into three dataframes for plotting reasons
+  ## Only PC1 and PC 2
+  PCAPlotData12 <- PCAPlotData %>%
+    select(-c("PC3")) %>%
+    mutate(facet = "PC1 (x) on PC2 (y)")
+  colnames(PCAPlotData12)[2:3] <- c("PlotPC1", "PlotPC2")
 
-    ## Only PC1 and PC 3
-    PCAPlotData13 <- PCAPlotData %>%
-      select(-c("PC2")) %>%
-      mutate(facet = "PC1 on PC3")
-    colnames(PCAPlotData13)[2:3] <- c("PlotPC1", "PlotPC2")
+  ## Only PC1 and PC 3
+  PCAPlotData13 <- PCAPlotData %>%
+    select(-c("PC2")) %>%
+    mutate(facet = "PC1 (x) on PC3 (y)")
+  colnames(PCAPlotData13)[2:3] <- c("PlotPC1", "PlotPC2")
 
-    ## Only PC2 and PC 3
-    PCAPlotData23 <- PCAPlotData %>%
-      select(-c("PC1")) %>%
-      mutate(facet = "PC2 on PC3")
-    colnames(PCAPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
+  ## Only PC2 and PC 3
+  PCAPlotData23 <- PCAPlotData %>%
+    select(-c("PC1")) %>%
+    mutate(facet = "PC2 (x) on PC3 (y)")
+  colnames(PCAPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
 
-    ## Recombining Dataframes in long format
-    PCAPlotData <- rbind(PCAPlotData12, PCAPlotData13, PCAPlotData23)
+  ## Recombining Dataframes in long format
+  PCAPlotData <- rbind(PCAPlotData12, PCAPlotData13, PCAPlotData23)
 
+  ## get variance explained
+  VarianceExplained <- PCA@R2
 
-    ## making Score plot
-    scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
-      geom_jitter() +
-      facet_wrap(~ PCAPlotData$facet) +
-      stat_ellipse()+
-      ggtitle(paste("Score plot", plotname)) +
-      xlab("") +
-      ylab("") +
-      theme_light(base_size = 13)
+  ## make lables for the facet axes
 
-    ## Making 3D score plot
-    ## extracting scores for the first three principal components
-    ScorePlot3D <- PCA@scores %>%
-      ## combine with sample information
-      cbind(PCAData) %>%
-      ## make 3D score plot using plotly
-      plotly::plot_ly(x = ~PC1, y = ~PC2, z = ~PC3, color = ~Status, type = "scatter3d", mode = "markers") %>%
-      ## add text to the points
-      plotly::layout(scene = list(xaxis = list(title = "PC1"), yaxis = list(title = "PC2"), zaxis = list(title = "PC3"))) %>%
-      ## Add a title to the 3D plot
-      plotly::layout(title = paste("3D Score plot", plotname))
-
-
-
-      ## loading plot
-    ## How many Proteins should be on the loading plot
-    TopN <- 5
-    PCALoadings <- PCA@loadings %>% data.frame() %>% abs()
-
-    ## top 10 loadings on PC1
-    LoadingsPC1 <- PCALoadings %>%
-      ## select PC
-      select("PC1") %>%
-      ## sort in descending order
-      arrange(-PC1) %>%
-      ## take topN
-      head(TopN) %>%
-      ## make column for facet wrap
-      mutate(PC = "PC1")
-    ## Rename column 1 to loading
-    colnames(LoadingsPC1)[1] <- "loadings"
-
-    ## top 10 loadings on PC2
-    LoadingsPC2 <- PCALoadings %>%
-      ## select PC
-      select("PC2") %>%
-      ## sort in descending order
-      arrange(-PC2) %>%
-      ## take topN
-      head(TopN) %>%
-      ## make column for facet wrap
-      mutate(PC = "PC2")
-    ## Rename column 1 to loading
-    colnames(LoadingsPC2)[1] <- "loadings"
-
-    ## top 10 loadings on PC3
-    LoadingsPC3 <- PCALoadings %>%
-      ## select PC
-      select("PC3") %>%
-      ## sort in descending order
-      arrange(-PC3) %>%
-      ## take topN
-      head(TopN) %>%
-      ## make column for facet wrap
-      mutate(PC = "PC3")
-    ## Rename column 1 to loading
-    colnames(LoadingsPC3)[1] <- "loadings"
-
-    ## making one big dataframe for plotting
-    LoadingData <- rbind(LoadingsPC1,LoadingsPC2,LoadingsPC3) %>%
-      rownames_to_column("Protein")
+  ## making Score plot
+  scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
+    geom_jitter() +
+    facet_wrap(~ PCAPlotData$facet, axis.labels = "all", labeller = custom_labeller) +
+    stat_ellipse()+
+    ggtitle(plotname, paste0(
+      "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
+      "PC2: ",round(VarianceExplained[2],2)*100, " %, ",
+      "PC3: ",round(VarianceExplained[3],2)*100, " % ")
+    ) +
+    ylab("") +
+    ## name x axis properly
+    xlab("") +
+    theme_light(base_size = 13) +
+    ## make facet title background white and text black
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
+    ## make fontsize bigger
+    theme(axis.text.x = element_text(size = 12),
+          axis.text.y = element_text(size = 12),
+          axis.title = element_text(size = 14),
+          strip.text = element_text(size = 14))
 
 
-    ## making loading plot
-    loadingPlot <- ggplot(data = LoadingData) +
-      geom_col(data = subset(LoadingData, PC == "PC1"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-      geom_col(data = subset(LoadingData, PC == "PC2"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-      geom_col(data = subset(LoadingData, PC == "PC3"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-      ggtitle(paste("Highest loading Proteins on each PC")) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      ylab("Abs(loadings)") +
-      xlab("Protein")+
-      theme_light(base_size = 13) +
-      ## angle x axis label
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  ## Making 3D score plot
+  ## extracting scores for the first three principal components
+  ScorePlot3D <- PCA@scores %>%
+    ## combine with sample information
+    cbind(PCAData) %>%
+    ## make 3D score plot using plotly
+    plotly::plot_ly(x = ~PC1, y = ~PC2, z = ~PC3, color = ~Status, type = "scatter3d", mode = "markers") %>%
+    ## add text to the points
+    plotly::layout(scene = list(xaxis = list(title = "PC1"), yaxis = list(title = "PC2"), zaxis = list(title = "PC3"))) %>%
+    ## Add a title to the 3D plot
+    plotly::layout(title = paste("3D Score plot", plotname))
 
 
-    ## Creating Output Object
-    Output <- list()
-    Output$ScorePlot2D <- scorePlot
-    Output$Loadingplot <- loadingPlot
-    Output$PCA <- PCA
-    Output$ScorePlot3D <- ScorePlot3D
+
+  ## loading plot
+  ## How many Proteins should be on the loading plot
+  TopN <- 5
+  PCALoadings <- PCA@loadings %>% data.frame() %>% abs()
+
+  ## top 10 loadings on PC1
+  LoadingsPC1 <- PCALoadings %>%
+    ## select PC
+    select("PC1") %>%
+    ## sort in descending order
+    arrange(-PC1) %>%
+    ## take topN
+    head(TopN) %>%
+    ## make column for facet wrap
+    mutate(PC = "PC1")
+  ## Rename column 1 to loading
+  colnames(LoadingsPC1)[1] <- "loadings"
+
+  ## top 10 loadings on PC2
+  LoadingsPC2 <- PCALoadings %>%
+    ## select PC
+    select("PC2") %>%
+    ## sort in descending order
+    arrange(-PC2) %>%
+    ## take topN
+    head(TopN) %>%
+    ## make column for facet wrap
+    mutate(PC = "PC2")
+  ## Rename column 1 to loading
+  colnames(LoadingsPC2)[1] <- "loadings"
+
+  ## top 10 loadings on PC3
+  LoadingsPC3 <- PCALoadings %>%
+    ## select PC
+    select("PC3") %>%
+    ## sort in descending order
+    arrange(-PC3) %>%
+    ## take topN
+    head(TopN) %>%
+    ## make column for facet wrap
+    mutate(PC = "PC3")
+  ## Rename column 1 to loading
+  colnames(LoadingsPC3)[1] <- "loadings"
+
+  ## making one big dataframe for plotting
+  LoadingData <- rbind(LoadingsPC1,LoadingsPC2,LoadingsPC3) %>%
+    rownames_to_column("Protein")
+
+
+  ## making loading plot
+  loadingPlot <- ggplot(data = LoadingData) +
+    geom_col(data = subset(LoadingData, PC == "PC1"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
+    geom_col(data = subset(LoadingData, PC == "PC2"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
+    geom_col(data = subset(LoadingData, PC == "PC3"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
+    ggtitle(paste("Highest loading Proteins on each PC")) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ylab("Abs(loadings)") +
+    xlab("Protein")+
+    theme_light(base_size = 13) +
+    ## angle x axis label
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+  ## Creating Output Object
+  Output <- list()
+  Output$ScorePlot2D <- scorePlot
+  Output$Loadingplot <- loadingPlot
+  Output$PCA <- PCA
+  Output$ScorePlot3D <- ScorePlot3D
 
   return(Output)
 }
