@@ -2938,11 +2938,11 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param nPcs The number of principal components to be calculated
 #' @param plotname The name to be displayed on created plots
 #' @param PoIs The protein or peptide of interest
-#' @param plotTop3Loading Logical value indicating if the top 3 loadings should be plotted
+#' @param plotTopNLoading Logical value indicating if the top 3 loadings should be plotted
 #' @param topNLoading The number of top loadings to be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTop3Loading = TRUE, topNLoading = 3){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3){
 
   if("Protein" %in% colnames(dataset)){
 
@@ -3072,7 +3072,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTop3Loading 
   PoILoadings <- PCALoadings %>% data.frame() %>% rownames_to_column(var = "Protein") %>%
     dplyr::filter(Protein %in% PoIs) %>% mutate(var = "PoIs")
 
-  ifelse(plotTop3Loading == T,
+  ifelse(plotTopNLoading == T,
          LoadingPlotData <- rbind(Top5Loadings,PoILoadings),
          LoadingPlotData <- PoILoadings)
 
