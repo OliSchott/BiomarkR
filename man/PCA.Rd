@@ -4,7 +4,14 @@
 \alias{PCA}
 \title{PCA}
 \usage{
-PCA(dataset, nPcs = 3, plotname = "PCA")
+PCA(
+  dataset,
+  nPcs = 3,
+  plotname = "PCA",
+  PoIs = "",
+  plotTop3Loading = TRUE,
+  topNLoading = 3
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -12,6 +19,12 @@ PCA(dataset, nPcs = 3, plotname = "PCA")
 \item{nPcs}{The number of principal components to be calculated}
 
 \item{plotname}{The name to be displayed on created plots}
+
+\item{PoIs}{The protein or peptide of interest}
+
+\item{plotTop3Loading}{Logical value indicating if the top 3 loadings should be plotted}
+
+\item{topNLoading}{The number of top loadings to be plotted}
 }
 \value{
 A list object containing the results of the PCA calculations and the PCA plot

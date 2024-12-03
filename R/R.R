@@ -2937,9 +2937,12 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param dataset The dataset to be tested
 #' @param nPcs The number of principal components to be calculated
 #' @param plotname The name to be displayed on created plots
+#' @param PoIs The protein or peptide of interest
+#' @param plotTop3Loading Logical value indicating if the top 3 loadings should be plotted
+#' @param topNLoading The number of top loadings to be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTop3Loading = TRUE, topNLoading = 3){
 
   if("Protein" %in% colnames(dataset)){
 
@@ -3013,7 +3016,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
   ## making Score plot
   scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
     geom_jitter() +
-    facet_wrap(~ PCAPlotData$facet, axis.labels = "all", labeller = custom_labeller) +
+    facet_wrap(~ PCAPlotData$facet, axis.labels = "all") +
     stat_ellipse()+
     ggtitle(plotname, paste0(
       "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
@@ -3026,12 +3029,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
     theme_light(base_size = 13) +
     ## make facet title background white and text black
     theme(strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-    ## make fontsize bigger
-    theme(axis.text.x = element_text(size = 12),
-          axis.text.y = element_text(size = 12),
-          axis.title = element_text(size = 14),
-          strip.text = element_text(size = 14))
+          strip.text = element_text(colour = "black"))
 
 
   ## Making 3D score plot
@@ -3047,68 +3045,74 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA"){
     plotly::layout(title = paste("3D Score plot", plotname))
 
 
-
   ## loading plot
   ## How many Proteins should be on the loading plot
-  TopN <- 5
-  PCALoadings <- PCA@loadings %>% data.frame() %>% abs()
 
-  ## top 10 loadings on PC1
-  LoadingsPC1 <- PCALoadings %>%
-    ## select PC
-    select("PC1") %>%
-    ## sort in descending order
+  PCALoadings <- PCA@loadings
+  Top5Data <- PCALoadings %>% data.frame() %>% abs()
+
+  Top5PC1 <- Top5Data %>%
     arrange(-PC1) %>%
-    ## take topN
-    head(TopN) %>%
-    ## make column for facet wrap
-    mutate(PC = "PC1")
-  ## Rename column 1 to loading
-  colnames(LoadingsPC1)[1] <- "loadings"
+    head(topNLoading) %>% row.names()
 
-  ## top 10 loadings on PC2
-  LoadingsPC2 <- PCALoadings %>%
-    ## select PC
-    select("PC2") %>%
-    ## sort in descending order
+  Top5PC2 <- Top5Data %>%
     arrange(-PC2) %>%
-    ## take topN
-    head(TopN) %>%
-    ## make column for facet wrap
-    mutate(PC = "PC2")
-  ## Rename column 1 to loading
-  colnames(LoadingsPC2)[1] <- "loadings"
+    head(topNLoading) %>% row.names()
 
-  ## top 10 loadings on PC3
-  LoadingsPC3 <- PCALoadings %>%
-    ## select PC
-    select("PC3") %>%
-    ## sort in descending order
+  Top5PC3 <- Top5Data %>%
     arrange(-PC3) %>%
-    ## take topN
-    head(TopN) %>%
-    ## make column for facet wrap
-    mutate(PC = "PC3")
-  ## Rename column 1 to loading
-  colnames(LoadingsPC3)[1] <- "loadings"
+    head(topNLoading) %>% row.names()
 
-  ## making one big dataframe for plotting
-  LoadingData <- rbind(LoadingsPC1,LoadingsPC2,LoadingsPC3) %>%
-    rownames_to_column("Protein")
+  ## get loadings for Top5Proteins
+  Top5Proteins <- c(Top5PC1, Top5PC2, Top5PC3)
 
+  Top5Loadings <- PCALoadings %>% data.frame() %>% rownames_to_column(var = "Protein") %>%
+    filter(Protein %in% Top5Proteins) %>% mutate(var = "Top5")
 
-  ## making loading plot
-  loadingPlot <- ggplot(data = LoadingData) +
-    geom_col(data = subset(LoadingData, PC == "PC1"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-    geom_col(data = subset(LoadingData, PC == "PC2"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-    geom_col(data = subset(LoadingData, PC == "PC3"), aes(x = reorder(Protein, -loadings), y = loadings, fill = PC)) +
-    ggtitle(paste("Highest loading Proteins on each PC")) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    ylab("Abs(loadings)") +
-    xlab("Protein")+
+  PoILoadings <- PCALoadings %>% data.frame() %>% rownames_to_column(var = "Protein") %>%
+    filter(Protein %in% PoIs) %>% mutate(var = "PoIs")
+
+  ifelse(plotTop3Loading == T,
+         LoadingPlotData <- rbind(Top5Loadings,PoILoadings),
+         LoadingPlotData <- PoILoadings)
+
+  ## Only PC1 and PC 2
+  LoadingPlotData12 <- LoadingPlotData %>%
+    select(-c("PC3")) %>%
+    mutate(facet = "PC1 (x) on PC2 (y)")
+  colnames(LoadingPlotData12)[2:3] <- c("PlotPC1", "PlotPC2")
+
+  ## Only PC1 and PC 3
+  LoadingPlotData13 <- LoadingPlotData %>%
+    select(-c("PC2")) %>%
+    mutate(facet = "PC1 (x) on PC3 (y)")
+  colnames(LoadingPlotData13)[2:3] <- c("PlotPC1", "PlotPC2")
+
+  ## Only PC2 and PC 3
+  LoadingPlotData23 <- LoadingPlotData %>%
+    select(-c("PC1")) %>%
+    mutate(facet = "PC2 (x) on PC3 (y)")
+  colnames(LoadingPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
+
+  ## Recombining Dataframes in long format
+  LoadingPlotData <- rbind(LoadingPlotData12, LoadingPlotData13, LoadingPlotData23)
+
+  loadingPlot <- ggplot(LoadingPlotData, aes(x = PlotPC1, y = PlotPC2, label = Protein, colour = var)) +
+    facet_wrap(~ facet) +
+    geom_segment(aes(x = 0, y = 0, xend = PlotPC1, yend = PlotPC2), arrow = arrow(type = "closed", length = unit(0.05, "inches"))) +  # Lines from origin
+    geom_text_repel(aes(label = Protein), size = 4) +  # Optional: Add text labels
+    ggtitle(plotname, paste0(
+      "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
+      "PC2: ",round(VarianceExplained[2],2)*100, " %, ",
+      "PC3: ",round(VarianceExplained[3],2)*100, " % ")
+    ) +
+    ylab("") +
+    ## name x axis properly
+    xlab("") +
     theme_light(base_size = 13) +
-    ## angle x axis label
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    ## make facet title background white and text black
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black"))
 
 
   ## Creating Output Object
