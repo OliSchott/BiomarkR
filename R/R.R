@@ -3052,25 +3052,25 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTop3Loading 
   Top5Data <- PCALoadings %>% data.frame() %>% abs()
 
   Top5PC1 <- Top5Data %>%
-    arrange(-PC1) %>%
-    head(topNLoading) %>% row.names()
+    dplyr::arrange(-PC1) %>%
+    utils::head(topNLoading) %>% row.names()
 
   Top5PC2 <- Top5Data %>%
-    arrange(-PC2) %>%
-    head(topNLoading) %>% row.names()
+    dplyr::arrange(-PC2) %>%
+    utils::head(topNLoading) %>% row.names()
 
   Top5PC3 <- Top5Data %>%
-    arrange(-PC3) %>%
-    head(topNLoading) %>% row.names()
+    dplyr::arrange(-PC3) %>%
+    utils::head(topNLoading) %>% row.names()
 
   ## get loadings for Top5Proteins
   Top5Proteins <- c(Top5PC1, Top5PC2, Top5PC3)
 
   Top5Loadings <- PCALoadings %>% data.frame() %>% rownames_to_column(var = "Protein") %>%
-    filter(Protein %in% Top5Proteins) %>% mutate(var = "Top5")
+    dplyr::filter(Protein %in% Top5Proteins) %>% mutate(var = "Top5")
 
   PoILoadings <- PCALoadings %>% data.frame() %>% rownames_to_column(var = "Protein") %>%
-    filter(Protein %in% PoIs) %>% mutate(var = "PoIs")
+    dplyr::filter(Protein %in% PoIs) %>% mutate(var = "PoIs")
 
   ifelse(plotTop3Loading == T,
          LoadingPlotData <- rbind(Top5Loadings,PoILoadings),
@@ -3078,20 +3078,20 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTop3Loading 
 
   ## Only PC1 and PC 2
   LoadingPlotData12 <- LoadingPlotData %>%
-    select(-c("PC3")) %>%
-    mutate(facet = "PC1 (x) on PC2 (y)")
+    dplyr::select(-c("PC3")) %>%
+    dplyr::mutate(facet = "PC1 (x) on PC2 (y)")
   colnames(LoadingPlotData12)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Only PC1 and PC 3
   LoadingPlotData13 <- LoadingPlotData %>%
-    select(-c("PC2")) %>%
-    mutate(facet = "PC1 (x) on PC3 (y)")
+    dplyr::select(-c("PC2")) %>%
+    dplyr::mutate(facet = "PC1 (x) on PC3 (y)")
   colnames(LoadingPlotData13)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Only PC2 and PC 3
   LoadingPlotData23 <- LoadingPlotData %>%
-    select(-c("PC1")) %>%
-    mutate(facet = "PC2 (x) on PC3 (y)")
+    dplyr::select(-c("PC1")) %>%
+    dplyr::mutate(facet = "PC2 (x) on PC3 (y)")
   colnames(LoadingPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Recombining Dataframes in long format
