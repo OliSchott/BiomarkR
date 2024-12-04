@@ -3095,12 +3095,13 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   colnames(LoadingPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Recombining Dataframes in long format
-  LoadingPlotData <- rbind(LoadingPlotData12, LoadingPlotData13, LoadingPlotData23)
+  LoadingPlotData <- rbind(LoadingPlotData12, LoadingPlotData13, LoadingPlotData23) %>%
+    dplyr::mutate(Gene = str_split_i(Protein, "_", 2))
 
   loadingPlot <- ggplot(LoadingPlotData, aes(x = PlotPC1, y = PlotPC2, label = Protein, colour = var)) +
     facet_wrap(~ facet) +
     geom_segment(aes(x = 0, y = 0, xend = PlotPC1, yend = PlotPC2), arrow = arrow(type = "closed", length = unit(0.05, "inches"))) +  # Lines from origin
-    geom_text_repel(aes(label = Protein), size = 4) +  # Optional: Add text labels
+    geom_text_repel(aes(label = Gene), size = 4) +  # Optional: Add text labels
     ggtitle(plotname, paste0(
       "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
       "PC2: ",round(VarianceExplained[2],2)*100, " %, ",
