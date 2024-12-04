@@ -2454,12 +2454,24 @@ ROC <- function(dataset, PoI){
   ## plot ROC curve using ggplot2
   AUC <- round(pROC::auc(roc_curve), 2)
 
-  roc_plot <- pROC::ggroc(roc_curve) +
-    ggplot2::ggtitle("ROC Curve") +
-    ggplot2::theme_minimal() +
-    ## add 1:1 line (red, dashed)
-    ggplot2::geom_abline(intercept = 1, slope = 1, linetype = "dashed", color = "red") +
-    ggplot2::ggtitle("ROC Curve", subtitle = paste("AUC =", AUC, "   ", "POI =", PoI))
+  ROCPlotData <- data.frame(Sensitivity = roc_curve$sensitivities,Specificity = roc_curve$specificities)
+
+  roc_plot <- ggplot2::ggplot(ROCPlotData) +
+    ggplot2::geom_line(aes(x = 1 - Specificity, y = Sensitivity), color = "black", linewidth = 1.5) +
+    ## add red line at 1:1
+    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red",linewidth = 1.5) +
+    ## fix y axis from 0 to 1
+    ggplot2::scale_y_continuous(limits = c(0, 1)) +
+    ## fix x axis from 0 to 1
+    ggplot2::scale_x_continuous(limits = c(0, 1)) +
+    ## title y axis
+    ggplot2::ylab("Sensitivity") +
+    ## title x axis
+    ggplot2::xlab("1 - Specificity") +
+    ## change title
+    ggplot2::ggtitle(plotname, paste("AUC: ", AUC)) +
+    ## theme minimal
+    ggplot2::theme_minimal()
 
   ## create output list
   output <- list(ROC_Plot = roc_plot,
@@ -3933,8 +3945,9 @@ SVM <- function(dataset, PoIs) {
 #' @param PoIs A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
 #' @param crossvalidation A boolean value indicating whether to use cross-validation> I recommend false for desriptive analysese and true for predictife tasks
 #' @return A list object containing the results of the GLM model, the confusion matrix and the ROC plot and the AUC if the dataset has 2 classes
+#' @param plotname The name to be displayed on created plots
 #' @export
-GLM <- function(dataset, PoIs, crossvalidation = F) {
+GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
 
   ## Error message if more than 2 classes, stop execution
   if (length(base::unique(dataset$Status)) > 2) {
@@ -3966,7 +3979,7 @@ GLM <- function(dataset, PoIs, crossvalidation = F) {
     base::message("Missing values in Data, please impute or remove them")
   }
 
-  ## make train control for no resampling
+  ## train control
   train_control <- caret::trainControl(method = ifelse(crossvalidation == T, "cv", "none"),
                                        number = ifelse(crossvalidation == T, 10, NA) ,
                                        classProbs = TRUE, summaryFunction = caret::twoClassSummary,
@@ -3975,38 +3988,90 @@ GLM <- function(dataset, PoIs, crossvalidation = F) {
   ## train the model
   glm_model <- caret::train(Status ~ ., data = MLData, method = "glm", trControl = train_control)
 
-  ## Make predictions on the training data
-  predictions <- predict(glm_model, MLData)
-  actuals <- factor(MLData$Status)
-
   ## Compute confusion matrix
-  Confusion_Matrix <- ifelse(crossvalidation == F,
-                             caret::confusionMatrix(predictions, actuals),
-                             caret::confusionMatrix(glm_model))
+  if(crossvalidation == T){
+    Confusion_Matrix <- caret::confusionMatrix(glm_model)
+  } else {
+    predictions <- stats::predict(glm_model, MLData) # Predicted probabilities for the positive class
+    actuals <- factor(MLData$Status)
+    Confusion_Matrix <-caret::confusionMatrix(predictions, actuals)
+    }
 
-  # Generate ROC curve
-  probabilities <- predict(glm_model, MLData, type = "prob")[, 2]  # Predicted probabilities for the positive class
 
-  # Ensure actuals are a factor
-  actuals <- factor(actuals, levels = base::levels(actuals))
 
-  # Generate ROC curve
-  suppressMessages(suppressWarnings(roc_curve <- pROC::roc(response = actuals, predictor = probabilities, levels = base::levels(actuals))))
+  ## Use cross-validated predictions for ROC curve
+  if (crossvalidation == TRUE) {
+    # Extract the cross-validated predictions
+    crossval_preds <- glm_model$pred %>% data.frame()
+
+    # Make sure levels of predictions match the actual levels
+    crossval_preds$obs <- factor(crossval_preds$obs, levels = unique(MLData$Status))
+
+    predictor <- crossval_preds[[3]]
+
+    # Generate ROC curve using cross-validated predictions
+    suppressMessages(suppressWarnings(
+      roc_curve <- pROC::roc(response = crossval_preds$obs,
+                             predictor = predictor, # Predicted probabilities for positive class
+                             ci = TRUE, boot.n = 2000, conf.level = 0.95)
+    ))
+
+    # Calculate confidence intervals for specificities
+    ci_band <- pROC::ci.se(roc_curve, specificities = seq(0, 1, by = 0.01), boot.n = 100) %>%
+      data.frame() %>% rownames_to_column(var = "specificity")
+
+    ci_band$specificity <- as.numeric(ci_band$specificity)
+
+    colnames(ci_band)[2:4] <- c("lower", "mean", "upper")
+
+    AUC_CI <- round(c(roc_curve$ci)[3],2)
+
+  } else {
+    # Use the non-CV predictions
+    probabilities <- stats::predict(glm_model, MLData, type = "prob")[, 2]  # Predicted probabilities for the positive class
+    actuals <- factor(MLData$Status)
+
+    suppressMessages(suppressWarnings(
+      roc_curve <- pROC::roc(response = actuals,
+                             predictor = probabilities)
+    ))
+  }
+
 
   ## plot ROC curve using ggplot
   AUC <- base::round(pROC::auc(roc_curve), 2)
 
-  roc_plot <- pROC::ggroc(roc_curve, legacy.axes = TRUE) +
-    ggplot2::ggtitle("ROC Curve") +
-    ggplot2::theme_minimal() +
-    ## add 1:1 line (red, dashed)
-    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-    ggplot2::ggtitle("ROC Curve", subtitle = base::paste("AUC =", AUC, ifelse(crossvalidation == F, "", "| 10x cross validated")))
+  ROCPlotData <- data.frame(Sensitivity = roc_curve$sensitivities,Specificity = roc_curve$specificities)
+
+  roc_plot <- ggplot2::ggplot(ROCPlotData) +
+    ggplot2::geom_line(aes(x = 1 - Specificity, y = Sensitivity), color = "black", linewidth = 1) +
+    ## add red line at 1:1
+    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red",linewidth = 1.5) +
+    ## fix y axis from 0 to 1
+    ggplot2::scale_y_continuous(limits = c(0, 1)) +
+    ## fix x axis from 0 to 1
+    ggplot2::scale_x_continuous(limits = c(0, 1)) +
+    ## title y axis
+    ggplot2::ylab("Sensitivity") +
+    ## title x axis
+    ggplot2::xlab("1 - Specificity") +
+    ## change title
+    ggplot2::ggtitle(plotname, paste("AUC: ", AUC)) +
+    ## theme minimal
+    ggplot2::theme_minimal()
+
+  ## add shaded confidence interval if cross validation == TRUE
+  if(crossvalidation == T){
+      roc_plot <- roc_plot +
+      ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1)+
+      ggplot2::ggtitle(plotname, paste("AUC:", AUC, " ± ", round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
+      }
+
 
   ## Create a list of all the output
   output <- base::list(Confusion_Matrix = Confusion_Matrix,
                        ROC_Plot = roc_plot,
-                       AUC = AUC,
+                       AUC = c(AUC),
                        model = glm_model)
 
   return(output)
