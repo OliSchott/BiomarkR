@@ -29,6 +29,7 @@
 #' @import ggrepel
 #' @import magrittr
 #' @import igraph
+#' @import Rtsne
 
 ## Data Import and Management
 ## add roxygen comments
@@ -3149,86 +3150,229 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 #' @export
 UMAP <- function(dataset, plotname = "") {
 
-if("Protein" %in% base::colnames(dataset)) {
-
-  # Reshape the dataset and normalize intensity
-  dataset <- dataset %>%
-    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    tidyr::pivot_longer(cols = contains("_"), names_to = "Protein", values_to = "Intensity") %>%
-    NaCutoff(70) %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE)
-
-  # Prepare clinical data for UMAP
-  UmapDataClin <- dataset %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE) %>%
-    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    dplyr::select(!contains("_"))
-
-  # Prepare quantitative data for UMAP
-  UmapDataQuant <- dataset %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE) %>%
-    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    tibble::column_to_rownames("Sample") %>%
-    dplyr::select(contains("_"))
-
+  ## error of missing values in Intensity column
+  if (base::any(base::is.na(dataset$Intensity))) {
+    base::stop("Missing values in dataset, please impute")
   }
 
-if("Peptide" %in% base::colnames(dataset)){
+  if ("Protein" %in% base::colnames(dataset)) {
 
-  # Reshape the dataset and normalize intensity
-  dataset <- dataset %>%
-    tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
-    tidyr::pivot_longer(cols = contains("_"), names_to = "Peptide", values_to = "Intensity") %>%
-    NaCutoff(70) %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE)
+    # Reshape the dataset and normalize intensity
+    dataset <- dataset %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      tidyr::pivot_longer(cols = dplyr::contains("_"), names_to = "Protein", values_to = "Intensity") %>%
+      normalizeIntensityOnSample(plot = FALSE)
 
-  # Prepare clinical data for UMAP
-  UmapDataClin <- dataset %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE) %>%
-    tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
-    dplyr::select(!contains("_"))
+    # Prepare clinical data for UMAP
+    UmapDataClin <- dataset %>%
+      normalizeIntensityOnSample(plot = FALSE) %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      dplyr::select(!dplyr::contains("_"))
 
-  # Prepare quantitative data for UMAP
-  UmapDataQuant <- dataset %>%
-    ImputeFeatureIntensity() %>%
-    normalizeIntensityOnSample(plot = FALSE) %>%
-    tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
-    tibble::column_to_rownames("Sample") %>%
-    dplyr::select(contains("_"))
+    # Prepare quantitative data for UMAP
+    UmapDataQuant <- dataset %>%
+      normalizeIntensityOnSample(plot = FALSE) %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      tibble::column_to_rownames("Sample") %>%
+      dplyr::select(dplyr::contains("_"))
+  }
 
-}
+  if ("Peptide" %in% base::colnames(dataset)) {
 
+    # Reshape the dataset and normalize intensity
+    dataset <- dataset %>%
+      tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+      tidyr::pivot_longer(cols = dplyr::contains("_"), names_to = "Peptide", values_to = "Intensity") %>%
+      normalizeIntensityOnSample(plot = FALSE)
+
+    # Prepare clinical data for UMAP
+    UmapDataClin <- dataset %>%
+      tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+      dplyr::select(!dplyr::contains("_"))
+
+    # Prepare quantitative data for UMAP
+    UmapDataQuant <- dataset %>%
+      normalizeIntensityOnSample(plot = FALSE) %>%
+      tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+      tibble::column_to_rownames("Sample") %>%
+      dplyr::select(dplyr::contains("_"))
+  }
 
   # Perform UMAP with three components
   UMAP <- umap::umap(UmapDataQuant, n_components = 3)
 
-  # Extract UMAP coordinates
-  UMAPPlotData <- as.data.frame(UMAP$layout) %>%
-    tibble::rownames_to_column("Sample") %>%
-    merge(UmapDataClin, by = "Sample")
+  UMAPPlotData <- base::data.frame(Sample = base::row.names(UMAP$layout),
+                                   UMAP1 = UMAP$layout[, 1],
+                                   UMAP2 = UMAP$layout[, 2],
+                                   UMAP3 = UMAP$layout[, 3])
 
-  # 2D Plot using ggplot2
-  ScorePlot2D <- ggplot2::ggplot(UMAPPlotData, aes(x = V1, y = V2, color = Status)) +
-    ggplot2::geom_point() +
-    ggplot2::theme_minimal() +
-    ggplot2::labs(title = paste("UMAP 2D Plot",plotname), x = "UMAP1", y = "UMAP2")
+  ## Only UMAP1 and UMAP2
+  UMAPPlotData12 <- UMAPPlotData %>%
+    dplyr::select(-c("UMAP3")) %>%
+    dplyr::mutate(facet = "UMAP1 (x) on UMAP2 (y)")
+  base::colnames(UMAPPlotData12)[2:3] <- c("PlotUMAP1", "PlotUMAP2")
+
+  ## Only UMAP1 and UMAP3
+  UMAPPlotData13 <- UMAPPlotData %>%
+    dplyr::select(-c("UMAP2")) %>%
+    dplyr::mutate(facet = "UMAP1 (x) on UMAP3 (y)")
+  base::colnames(UMAPPlotData13)[2:3] <- c("PlotUMAP1", "PlotUMAP2")
+
+  ## Only UMAP2 and UMAP3
+  UMAPPlotData23 <- UMAPPlotData %>%
+    dplyr::select(-c("UMAP1")) %>%
+    dplyr::mutate(facet = "UMAP2 (x) on UMAP3 (y)")
+  base::colnames(UMAPPlotData23)[2:3] <- c("PlotUMAP1", "PlotUMAP2")
+
+  ## Recombining Dataframes in long format
+  UMAPPlotData2D <- base::rbind(UMAPPlotData12, UMAPPlotData13, UMAPPlotData23) %>%
+    base::merge(UmapDataClin, by = "Sample")
+
+  ## Making Score plot
+  UMAPPlot2D <- ggplot2::ggplot(UMAPPlotData2D, ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, colour = Status)) +
+    ggplot2::geom_jitter() +
+    ggplot2::facet_wrap(~facet, axis.labels = "all") +
+    ggplot2::stat_ellipse() +
+    ggplot2::ylab("") +
+    ggplot2::xlab("") +
+    ggplot2::theme_light(base_size = 13) +
+    ggplot2::theme(strip.background = ggplot2::element_rect(fill = "white"),
+                   strip.text = ggplot2::element_text(colour = "black"))
+
+  ## 3D Plot Data
+  UMAPPlotData <- base::data.frame(Sample = base::row.names(UMAP$layout),
+                                   UMAP1 = UMAP$layout[, 1],
+                                   UMAP2 = UMAP$layout[, 2],
+                                   UMAP3 = UMAP$layout[, 3]) %>%
+    base::merge(UmapDataClin, by = "Sample")
 
   # 3D Plot using plotly
-  ScorePlot3D <- plotly::plot_ly(UMAPPlotData, x = ~V1, y = ~V2, z = ~V3, color = ~Status, type = "scatter3d", mode = "markers") %>%
-    plotly::layout(title = paste("UMAP 3D Plot", plotname), scene = list(xaxis = list(title = "UMAP1"), yaxis = list(title = "UMAP2"), zaxis = list(title = "UMAP3")))
+  UMAPPlot3D <- plotly::plot_ly(UMAPPlotData, x = ~UMAP1, y = ~UMAP2, z = ~UMAP3, color = ~Status, type = "scatter3d", mode = "markers") %>%
+    plotly::layout(title = base::paste(plotname),
+                   scene = list(xaxis = list(title = "UMAP1"),
+                                yaxis = list(title = "UMAP2"),
+                                zaxis = list(title = "UMAP3")))
 
   # Creating Output Object
-  Output <- list(UMAP = UMAP,
-                 ScorePlot2D = ScorePlot2D,
-                 ScorePlot3D = ScorePlot3D)
+  Output <- base::list(UMAP = UMAP,
+                       UMAPPlot2D = UMAPPlot2D,
+                       UMAPPlot3D = UMAPPlot3D)
 
   return(Output)
 }
+
+
+
+## tSNE
+## add roxygen comments
+#' @title tSNE
+#' @description t-distributed Stochastic Neighbor Embedding for the specified dataset.
+#' @param dataset The dataset to be plotted
+#' @param plotname The name to be displayed on created plots
+#' @return A list object containing the results of the tSNE calculations and the tSNE plot
+#' @export
+tSNE <- function(dataset, plotname = "") {
+
+  ## Error if missing values in object
+  if (any(is.na(dataset$Intensity))) {
+    stop("Missing values in dataset, please impute")
+  }
+
+  if ("Protein" %in% colnames(dataset)) {
+
+    ## Data management
+    tSNEData <- dataset %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      dplyr::select(Sample, dplyr::contains("_")) %>%
+      tibble::column_to_rownames(var = "Sample") %>%
+      as.matrix()
+
+    ClinicalData <- dataset %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      dplyr::select(Sample, !dplyr::contains("_"))
+  }
+
+  if ("Peptide" %in% colnames(dataset)) {
+
+    ## Data management
+    tSNEData <- dataset %>%
+      tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+      dplyr::select(Sample, dplyr::contains("_")) %>%
+      tibble::column_to_rownames(var = "Sample") %>%
+      as.matrix()
+
+    ClinicalData <- dataset %>%
+      tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+      dplyr::select(Sample, !dplyr::contains("_"))
+  }
+
+  set.seed(2105)  # Use any fixed number
+
+  ## Calculate t-SNE embedding
+  tSNEResult <- Rtsne::Rtsne(tSNEData, dims = 3)
+
+  ## Make plot data
+  tSNEPlotData <- data.frame(Sample = row.names(tSNEData),
+                             Dim1 = tSNEResult$Y[, 1],
+                             Dim2 = tSNEResult$Y[, 2],
+                             Dim3 = tSNEResult$Y[, 3])
+
+  ## Only Dim1 and Dim2
+  tSNEPlotData12 <- tSNEPlotData %>%
+    dplyr::select(-c("Dim3")) %>%
+    dplyr::mutate(facet = "Dim1 (x) on Dim2 (y)")
+  colnames(tSNEPlotData12)[2:3] <- c("PlotDim1", "PlotDim2")
+
+  ## Only Dim1 and Dim3
+  tSNEPlotData13 <- tSNEPlotData %>%
+    dplyr::select(-c("Dim2")) %>%
+    dplyr::mutate(facet = "Dim1 (x) on Dim3 (y)")
+  colnames(tSNEPlotData13)[2:3] <- c("PlotDim1", "PlotDim2")
+
+  ## Only Dim2 and Dim3
+  tSNEPlotData23 <- tSNEPlotData %>%
+    dplyr::select(-c("Dim1")) %>%
+    dplyr::mutate(facet = "Dim2 (x) on Dim3 (y)")
+  colnames(tSNEPlotData23)[2:3] <- c("PlotDim1", "PlotDim2")
+
+  ## Recombine Dataframes in long format
+  tSNEPlotData <- dplyr::bind_rows(tSNEPlotData12, tSNEPlotData13, tSNEPlotData23) %>%
+    dplyr::inner_join(ClinicalData, by = "Sample")
+
+  ## Making 2D score plot
+  tSNEPlot2D <- ggplot2::ggplot(tSNEPlotData, ggplot2::aes(x = PlotDim1, y = PlotDim2, colour = Status)) +
+    ggplot2::geom_jitter() +
+    ggplot2::facet_wrap(~facet, labeller = "label_value") +
+    ggplot2::stat_ellipse() +
+    ggplot2::ylab("") +
+    ggplot2::xlab("") +
+    ggplot2::theme_light(base_size = 13) +
+    ggplot2::theme(strip.background = ggplot2::element_rect(fill = "white"),
+                   strip.text = ggplot2::element_text(colour = "black")) +
+    ggplot2::ggtitle(plotname)
+
+  ## Making 3D score plot
+  PlotData3ED <- data.frame(Sample = row.names(tSNEData),
+                            Dim1 = tSNEResult$Y[, 1],
+                            Dim2 = tSNEResult$Y[, 2],
+                            Dim3 = tSNEResult$Y[, 3]) %>%
+    dplyr::inner_join(ClinicalData, by = "Sample")
+
+  tSNEPlot3D <- PlotData3ED %>%
+    plotly::plot_ly(x = ~Dim1, y = ~Dim2, z = ~Dim3, color = ~Status, type = "scatter3d", mode = "markers") %>%
+    plotly::layout(scene = list(xaxis = list(title = "Dim1"),
+                                yaxis = list(title = "Dim2"),
+                                zaxis = list(title = "Dim3")),
+                   title = plotname)
+
+  ## Make output list
+  Output <- list(tSNE = tSNEResult,
+                 ScorePlot2D = tSNEPlot2D,
+                 ScorePlot3D = tSNEPlot3D)
+
+  return(Output)
+}
+
 
 
 ## EffectAnalysis

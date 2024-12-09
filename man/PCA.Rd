@@ -9,7 +9,7 @@ PCA(
   nPcs = 3,
   plotname = "PCA",
   PoIs = "",
-  plotTop3Loading = TRUE,
+  plotTopNLoading = TRUE,
   topNLoading = 3
 )
 }
@@ -22,7 +22,7 @@ PCA(
 
 \item{PoIs}{The protein or peptide of interest}
 
-\item{plotTop3Loading}{Logical value indicating if the top 3 loadings should be plotted}
+\item{plotTopNLoading}{Logical value indicating if the top 3 loadings should be plotted}
 
 \item{topNLoading}{The number of top loadings to be plotted}
 }
