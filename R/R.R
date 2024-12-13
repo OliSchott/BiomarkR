@@ -22,7 +22,6 @@
 #' @import seqinr
 #' @import sva
 #' @import dendextend
-#' @import magick
 #' @import STRINGdb
 #' @import MLmetrics
 #' @import plotly
@@ -585,6 +584,7 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
   }
 
   Filter <- dataset %>%
+    dplyr::filter(!is.na(Intensity)) %>%
     dplyr::group_by({{groupVar}}, Protein) %>%
     dplyr::summarise(nObs = n()) %>%
     dplyr::ungroup() %>%
@@ -1747,7 +1747,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
         size = 3,
         angle = 30
       ) +
-      ggplot2::ggtitle(paste("Volcano plot Wilcox Test", plotname)) +
+      ggplot2::ggtitle(plotname) +
       ggplot2::xlab(paste("Fold change in", unique(WResults$group1))) +
       ggplot2::theme_light(base_size = 13) +
       ## rename y axis
@@ -1821,7 +1821,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
         ggplot2::aes(label = Gene, x = FC, y = log10adjustP),
         vjust = 0.5, hjust = -0.2, size = 3, angle = 30
       ) +
-      ggplot2::ggtitle(paste("Volcano plot Wilcox Test", plotname)) +
+      ggplot2::ggtitle(plotname) +
       ggplot2::xlab(paste("Fold change in", unique(WResults$group1))) +
       ggplot2::theme_light(base_size = 13) +
       ggplot2::ylab(ifelse(p.adj.method != "none", "log10 (p.adj)", "log10 (p)"))
@@ -1862,7 +1862,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the Fisher test, the significant features and a volcano plot
 #' @export
-FisherTest <- function(dataset, plotname = ""){
+FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
 
   ## Prepare Data
 
@@ -1908,62 +1908,30 @@ FisherTest <- function(dataset, plotname = ""){
 
     FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
 
-    Results[[i]] <- data.frame(Protein = ContingencyTable[[i]]$Protein[1],
-                               OR = FisherResults$estimate,
-                               p = FisherResults$p,
-                               n = FisherResults$n)
+    Protein <- ContingencyTable[[i]]$Protein[1]
+    p <- FisherResults$p
+    n <- FisherResults$n
+
+    Results[[i]] <- data.frame(Protein, p, n)
   }
+
+  ## calculate frequency of observations per group
+  Frequency <- DataForFisher %>%
+    dplyr::group_by(Protein, Status) %>%
+    dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
+    group_by(Status, Protein) %>%
+    dplyr::mutate(Percentage = Count/sum(Count) * 100)
 
   Results <- dplyr::bind_rows(Results) %>%
     ## Adjusting p-values for multiple testing
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
-    rstatix::adjust_pvalue(method = "BH") %>%
+    rstatix::adjust_pvalue(method = p.adjust.method) %>%
     dplyr::arrange(p.adj) %>%
-    dplyr::mutate(Direction = dplyr::if_else(OR > 1, "Up", "Down")) %>%
-    dplyr::mutate(Direction = dplyr::if_else(p.adj > 0.05, "NotSignificant", Direction)) %>%
     dplyr::mutate(log10adjustP = -log10(p.adj)) %>%
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2))
 
 
-
-  ## Plot Resutls
-  vulcanoPlot <- ggplot2::ggplot(data = Results) +
-    ## Plotting not significant the points
-    ggplot2::geom_point(
-      size = 3.5, shape = 21,
-      data = subset(Results, Direction == "NotSignificant"),
-      ggplot2::aes(x = OR, y = log10adjustP, fill = "NotSignificant")
-    ) +
-    ## Plotting Upregulated points
-    ggplot2::geom_point(
-      size = 3.5, shape = 21,
-      data = subset(Results, Direction == "Up"),
-      ggplot2::aes(x = OR, y = log10adjustP, fill = "Up")
-    ) +
-    ## Plotting Downregulated points
-    ggplot2::geom_point(
-      size = 3.5, shape = 21,
-      data = subset(Results, Direction == "Down"),
-      ggplot2::aes(x = OR, y = log10adjustP, fill = "Down")
-    ) +
-    ## Adding color legend
-    ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
-    ## Adding horizontal lines for significant thresholds
-    ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
-    ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
-    ## Add names of significant proteins
-    ggplot2::geom_text(
-      data = subset(Results, p > 1.3),
-      ggplot2::aes(label = Gene, x = OR, y = p),
-      vjust = 0.5, hjust = -0.2, size = 3, angle = 30
-    ) +
-    ## Adding labels and title
-    ggplot2::ggtitle(paste("Volcano plot Fisher Test", plotname)) +
-    ggplot2::xlab(paste("Odds ratio")) +
-    ggplot2::ylab("-log10(p.adj)") +
-    ggplot2::theme_light(base_size = 13)
-
-  return(list(Results = Results, Plot = vulcanoPlot))
+  return(list(Results = Results))
 
 }
 
@@ -2428,7 +2396,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 #' @return A list object containing the results of the ROC calculations and a plot
 #' @export
 
-ROC <- function(dataset, PoI){
+ROC <- function(dataset, PoI, plotname = ""){
 
   ## error of more than 2 classes
   if(length(unique(dataset$Status)) > 2){
@@ -4208,7 +4176,7 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   if(crossvalidation == T){
       roc_plot <- roc_plot +
       ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1)+
-      ggplot2::ggtitle(plotname, paste("AUC:", AUC, " ± ", round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
+      ggplot2::ggtitle(plotname, paste("AUC:", AUC, " B1 ", round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
       }
 
 
