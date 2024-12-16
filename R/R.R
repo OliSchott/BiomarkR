@@ -1915,12 +1915,28 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
     Results[[i]] <- data.frame(Protein, p, n)
   }
 
-  ## calculate frequency of observations per group
-  Frequency <- DataForFisher %>%
-    dplyr::group_by(Protein, Status) %>%
-    dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
-    group_by(Status, Protein) %>%
-    dplyr::mutate(Percentage = Count/sum(Count) * 100)
+  if("Protein" %in% colnames(dataset)){
+
+    ## calculate frequency of observations per group
+    Frequency <- DataForFisher %>%
+      dplyr::group_by(Protein, Status) %>%
+      dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
+      group_by(Status, Protein) %>%
+      dplyr::mutate(Percentage = Count/sum(Count) * 100)
+
+  }
+
+
+  if("Peptide" %in% colnames(dataset)){
+
+    ## calculate frequency of observations per group
+    Frequency <- DataForFisher %>%
+      dplyr::group_by(Peptide, Status) %>%
+      dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
+      group_by(Status, Peptide) %>%
+      dplyr::mutate(Percentage = Count/sum(Count) * 100)
+
+  }
 
   Results <- dplyr::bind_rows(Results) %>%
     ## Adjusting p-values for multiple testing
