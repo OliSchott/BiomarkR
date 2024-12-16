@@ -583,24 +583,50 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
     stop("groupVar must be a column name of dataset")
   }
 
-  Filter <- dataset %>%
-    dplyr::filter(!is.na(Intensity)) %>%
-    dplyr::group_by({{groupVar}}, Protein) %>%
-    dplyr::summarise(nObs = n()) %>%
-    dplyr::ungroup() %>%
-    tidyr::pivot_wider(names_from = {{groupVar}}, values_from = nObs) %>%
-    ## convert so True if > n
-    dplyr::mutate(across(-Protein, ~ . > n)) %>%
-    ## calculate row sum if True == 1
-    dplyr::mutate(Total = rowSums(select(., -Protein))) %>%
-    ## filter for rows where Total == ncolums - 2
-    dplyr::filter(Total == ncol(.) - 2) %>%
-    ## get Protein names
-    dplyr::pull(Protein)
+  if("Protein" %in% colnames(dataset)){
 
-  FilteredData <- dataset %>%
-    dplyr::filter(Protein %in% Filter)
+    Filter <- dataset %>%
+      dplyr::filter(!is.na(Intensity)) %>%
+      dplyr::group_by({{groupVar}}, Protein) %>%
+      dplyr::summarise(nObs = n()) %>%
+      dplyr::ungroup() %>%
+      tidyr::pivot_wider(names_from = {{groupVar}}, values_from = nObs) %>%
+      ## convert so True if > n
+      dplyr::mutate(across(-Protein, ~ . >= n)) %>%
+      ## calculate row sum if True == 1
+      dplyr::mutate(Total = rowSums(select(., -Protein))) %>%
+      ## filter for rows where Total == ncolums - 2
+      dplyr::filter(Total == ncol(.) - 2) %>%
+      ## get Protein names
+      dplyr::pull(Protein)
 
+    FilteredData <- dataset %>%
+      dplyr::filter(Protein %in% Filter)
+
+  }
+
+
+  if("Peptide" %in% colnames(dataset)){
+
+    Filter <- dataset %>%
+      dplyr::filter(!is.na(Intensity)) %>%
+      dplyr::group_by({{groupVar}}, Peptide) %>%
+      dplyr::summarise(nObs = n()) %>%
+      dplyr::ungroup() %>%
+      tidyr::pivot_wider(names_from = {{groupVar}}, values_from = nObs) %>%
+      ## convert so True if > n
+      dplyr::mutate(across(-Peptide, ~ . >=n)) %>%
+      ## calculate row sum if True == 1
+      dplyr::mutate(Total = rowSums(select(., -Peptide))) %>%
+      ## filter for rows where Total == ncolums - 2
+      dplyr::filter(Total == ncol(.) - 2) %>%
+      ## get Peptide names
+      dplyr::pull(Peptide)
+
+    FilteredData <- dataset %>%
+      dplyr::filter(Peptide %in% Filter)
+
+  }
 
   return(FilteredData)
 }
@@ -1862,7 +1888,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the Fisher test, the significant features and a volcano plot
 #' @export
-FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
+FisherTest <- function(dataset, p.adjust.method = "BH"){
 
   ## Prepare Data
 
@@ -1874,7 +1900,8 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
       dplyr::filter(Protein %in% PoIs) %>%
       dplyr::select(Sample, Protein, Intensity, Status) %>%
       tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Protein", values_to = "Intensity")
+      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Protein", values_to = "Intensity") %>%
+      nObsPerGroup(Status, n = 1)
 
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
@@ -1900,6 +1927,7 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
 
       Results[[i]] <- data.frame(Protein, p, n)
 
+    }
   }
 
   if("Peptide" %in% colnames(dataset)){
@@ -1910,7 +1938,8 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
       dplyr::filter(Peptide %in% PoIs) %>%
       dplyr::select(Sample, Peptide, Intensity, Status) %>%
       tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
-      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Peptide", values_to = "Intensity")
+      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Peptide", values_to = "Intensity") %>%
+      nObsPerGroup(Status, n = 1)
 
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
@@ -1919,64 +1948,76 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
                        Missing = sum(is.na(Intensity)), .groups = 'drop') %>%
       split(.$Peptide)
 
-    ## Run Fisher Test
-    Results <- list()
-
-    for (i in 1:length(ContingencyTable)) {
-      ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
-        dplyr::select(-Peptide) %>%
-        tibble::column_to_rownames("Status") %>%
-        as.matrix()
-
-      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
-
-      Peptide <- ContingencyTable[[i]]$Peptide[1]
-      p <- FisherResults$p
-      n <- FisherResults$n
-
-      Results[[i]] <- data.frame(Peptide, p, n)
-
   }
 
 
+  ## Run Fisher Test
+  Results <- list()
+
+  for (i in 1:length(ContingencyTable)) {
+    ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
+      dplyr::select(-Peptide) %>%
+      tibble::column_to_rownames("Status") %>%
+      as.matrix() %>% t()
+
+    FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
+
+    Peptide <- ContingencyTable[[i]]$Peptide[1]
+    p <- FisherResults$p
+    n <- FisherResults$n
+
+    Results[[i]] <- data.frame(Peptide, p, n)
+
   }
+
+  ## Create output
 
   if("Protein" %in% colnames(dataset)){
 
     ## calculate frequency of observations per group
-    Frequency <- DataForFisher %>%
+    Frequency <- DataForFisher %>% filter(!is.na(Intensity)) %>%
       dplyr::group_by(Protein, Status) %>%
       dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
       group_by(Status, Protein) %>%
       dplyr::mutate(Percentage = Count/sum(Count) * 100)
 
-  }
+    Results <- dplyr::bind_rows(Results) %>%
+      ## Adjusting p-values for multiple testing
+      dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
+      rstatix::adjust_pvalue(method = p.adjust.method) %>%
+      dplyr::arrange(p.adj) %>%
+      dplyr::mutate(log10adjustP = -log10(p.adj)) %>%
+      dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2))
 
+  }
 
   if("Peptide" %in% colnames(dataset)){
 
     ## calculate frequency of observations per group
-    Frequency <- DataForFisher %>%
-      dplyr::group_by(Peptide, Status) %>%
-      dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
-      group_by(Status, Peptide) %>%
-      dplyr::mutate(Percentage = Count/sum(Count) * 100)
+    Frequency <- DataForFisher %>% filter(!is.na(Intensity)) %>%
+      dplyr::count(Peptide, Status) %>%
+      tidyr::pivot_wider(names_from = Status, values_from = n)
+
+    Results <- dplyr::bind_rows(Results) %>%
+      ## Adjusting p-values for multiple testing
+      dplyr::mutate(Gene = stringr::str_split_i(Peptide, pattern = "_", 2)) %>%
+      rstatix::adjust_pvalue(method = p.adjust.method) %>%
+      dplyr::arrange(p.adj) %>%
+      dplyr::mutate(log10adjustP = -log10(p.adj)) %>%
+      dplyr::mutate(Gene = stringr::str_split_i(Peptide, pattern = "_", 2))
 
   }
 
-  Results <- dplyr::bind_rows(Results) %>%
-    ## Adjusting p-values for multiple testing
-    dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
-    rstatix::adjust_pvalue(method = p.adjust.method) %>%
-    dplyr::arrange(p.adj) %>%
-    dplyr::mutate(log10adjustP = -log10(p.adj)) %>%
-    dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2))
 
 
+  ## return output
   return(list(Results = Results,
               Frequency = Frequency))
 
+
+
 }
+
 
 ## ANOVA
 ## add roxygen comments
