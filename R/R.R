@@ -1947,7 +1947,8 @@ FisherTest <- function(dataset, plotname = "", p.adjust.method = "BH"){
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2))
 
 
-  return(list(Results = Results))
+  return(list(Results = Results,
+              Frequency = Frequency))
 
 }
 
