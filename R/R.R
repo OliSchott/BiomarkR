@@ -1885,8 +1885,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @title FisherTest
 #' @description This function performs a Fisher test for differential expression analysis.
 #' @param dataset The dataset to be tested
-#' @param plotname The name to be displayed on created plots
-#' @return A list object containing the results of the Fisher test, the significant features and a volcano plot
+#' @return A list object containing the results of the Fisher test
 #' @export
 FisherTest <- function(dataset, p.adjust.method = "BH"){
 
@@ -1900,8 +1899,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
       dplyr::filter(Protein %in% PoIs) %>%
       dplyr::select(Sample, Protein, Intensity, Status) %>%
       tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Protein", values_to = "Intensity") %>%
-      nObsPerGroup(Status, n = 1)
+      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Protein", values_to = "Intensity")
 
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
@@ -1938,8 +1936,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
       dplyr::filter(Peptide %in% PoIs) %>%
       dplyr::select(Sample, Peptide, Intensity, Status) %>%
       tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
-      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Peptide", values_to = "Intensity") %>%
-      nObsPerGroup(Status, n = 1)
+      tidyr::pivot_longer(cols = -c(Sample, Status), names_to = "Peptide", values_to = "Intensity")
 
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
