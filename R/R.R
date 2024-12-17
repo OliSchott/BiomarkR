@@ -1972,7 +1972,8 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
   if("Protein" %in% colnames(dataset)){
 
     ## calculate frequency of observations per group
-    Frequency <- DataForFisher %>% filter(!is.na(Intensity)) %>%
+    Frequency <- DataForFisher %>%
+      dplyr::filter(!is.na(Intensity)) %>%
       dplyr::group_by(Protein, Status) %>%
       dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
       group_by(Status, Protein) %>%
@@ -1991,7 +1992,8 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
   if("Peptide" %in% colnames(dataset)){
 
     ## calculate frequency of observations per group
-    Frequency <- DataForFisher %>% filter(!is.na(Intensity)) %>%
+    Frequency <- DataForFisher %>%
+      dplyr::filter(!is.na(Intensity)) %>%
       dplyr::count(Peptide, Status) %>%
       tidyr::pivot_wider(names_from = Status, values_from = n)
 
