@@ -2408,6 +2408,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
     # Arrange AUCResults by decreasing AUC values
     AUCResults <- dplyr::arrange(AUCResults, desc(AUC))
+
   }
 
   # Create AUC plot using ggplot2
@@ -2434,15 +2435,33 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
   }
 
-  colnames(AUCResults)[1] <- "Protein"
+  colnames(AUCResults)[1] <- ifelse("Protein" %in% colnames(dataset), "Protein", "Peptide")
 
-  ## Combine the two dataframes
-  Vulcanoplotdata <- merge(Diff, AUCResults, by = "Protein") %>%
-    ## Add AUC to 0.5 if value is less than 0.5
-    dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
-    dplyr::mutate(Gene = str_split_i(Protein, "_", 2)) %>%
-    dplyr::mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
-    dplyr::arrange(desc(AUC))
+  if("Protein" %in% colnames(dataset)){
+    ## Combine the two dataframes
+    Vulcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Protein" %in% colnames(dataset),"Protein", "Peptide")) %>%
+      ## Add AUC to 0.5 if value is less than 0.5
+      dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
+      ## make gene column for later plot annotation
+      dplyr::mutate(Gene = str_split_i(Protein, "_", 2)) %>%
+      ## make direction column for coloring
+      dplyr::mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
+      dplyr::arrange(desc(AUC))
+
+  }
+
+  if("Peptide" %in% colnames(dataset)){
+    ## Combine the two dataframes
+    Vulcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Peptide" %in% colnames(dataset),"Peptide", "Peptide")) %>%
+      ## Add AUC to 0.5 if value is less than 0.5
+      dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
+      ## make gene column for later plot annotation
+      dplyr::mutate(Gene = str_split_i(Peptide, "_", 2)) %>%
+      ## make direction column for coloring
+      dplyr::mutate(Direction = ifelse(Diff > 0, "Up", "Down")) %>%
+      dplyr::arrange(desc(AUC))
+
+  }
 
   VulcanoPlot <- ## volcano plot of Results
     ggplot2::ggplot(Vulcanoplotdata, aes(x = Diff, y = AUC)) +
@@ -2641,9 +2660,10 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @param Annotations comumn names of the dataset that should be annotated
 #' @param ColPalette The color palette to be used for the annotations (Specified using the names of a color palette from the RColorBrewer package): https://www.aptech.com/releases/gauss18/graphics-updates/color-brewer-palettes/
 #' @param contColors The colors to be used for continuous annotations of numeric columns (Input is a vector of colors, example c("green", "red"))
+#' @param fontsize The fontsize to be used for the annotations (numeric value)
 #' @return A Heatmap object
 #' @export
-HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "Set1", contColors = c("yellow", "purple")) {
+HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "Set1", contColors = c("yellow", "purple"), fontsize = 8) {
   ## creating heat map Data
   if ("Protein" %in% colnames(dataset)) {
     HeatMapData <- dataset %>%
@@ -2744,12 +2764,15 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       clustering_distance_rows = clustDist,
       show_row_names = show_row_names,
       row_split = row_split,
-      ## specify pacient status as main cluster
+      ## specify patient status as main cluster
       column_split = HeatMapDataClin$Status,
       ## Changing Legend title
       name = "z-score Int",
       ## naming Plot
-      column_title = paste(plotname)
+      column_title = paste(plotname),
+      ## adjust font size for row names
+      row_names_gp = gpar(fontsize = fontsize),
+      column_names_gp = gpar(fontsize = fontsize)
     )
   } else if (tolower(method) == "unsupervised") {
 
@@ -2771,7 +2794,10 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       ## Change legend title
       name = "z-score Int",
       ## naming Plot
-      column_title = paste(plotname)
+      column_title = paste(plotname),
+      ## adjust font size for row names
+      row_names_gp = gpar(fontsize = fontsize),
+      column_names_gp = gpar(fontsize = fontsize)
     )
   } else {
     stop("Invalid method. Choose either 'supervised' or 'unsupervised'.")
