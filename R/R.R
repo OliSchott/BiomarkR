@@ -1904,8 +1904,9 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
       dplyr::group_by(Protein, Status) %>%
-      dplyr::summarise(Count = dplyr::n(),
-                       Missing = sum(is.na(Intensity)), .groups = 'drop') %>%
+      dplyr::summarise(Total = dplyr::n(),
+                       Missing = sum(is.na(Intensity)), .groups = 'drop',
+                       Count = Total - Missing) %>%
       split(.$Protein)
 
     ## Run Fisher Test
@@ -1917,7 +1918,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
         tibble::column_to_rownames("Status") %>%
         as.matrix()
 
-      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
+      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE,)
 
       Protein <- ContingencyTable[[i]]$Protein[1]
       p <- FisherResults$p
@@ -1941,29 +1942,32 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
       dplyr::group_by(Peptide, Status) %>%
-      dplyr::summarise(Count = dplyr::n(),
-                       Missing = sum(is.na(Intensity)), .groups = 'drop') %>%
+      dplyr::summarise(
+        Total = n(),                                # Total rows in each group
+        Missing = sum(is.na(Intensity)),            # Rows with NA in Intensity
+        .groups = 'drop'
+      ) %>%
       split(.$Peptide)
+
+    ## Run Fisher Test
+    Results <- list()
+
+    for (i in 1:length(ContingencyTable)) {
+      ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
+        dplyr::select(-Peptide) %>%
+        tibble::column_to_rownames("Status") %>%
+        as.matrix() %>% t()
+
+      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
+
+      Peptide <- ContingencyTable[[i]]$Peptide[1]
+      p <- FisherResults$p
+      n <- FisherResults$n
+
+      Results[[i]] <- data.frame(Peptide, p, n)
 
   }
 
-
-  ## Run Fisher Test
-  Results <- list()
-
-  for (i in 1:length(ContingencyTable)) {
-    ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
-      dplyr::select(-Peptide) %>%
-      tibble::column_to_rownames("Status") %>%
-      as.matrix() %>% t()
-
-    FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
-
-    Peptide <- ContingencyTable[[i]]$Peptide[1]
-    p <- FisherResults$p
-    n <- FisherResults$n
-
-    Results[[i]] <- data.frame(Peptide, p, n)
 
   }
 
