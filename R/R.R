@@ -1371,6 +1371,7 @@ FindNACutoff <- function(dataset, plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @param method The method to be used for the Heatmap (unsupervised, supervised)
 #' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
+#' @export
 TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean"){
 
   ## Normalize data for T-Test
@@ -1558,111 +1559,19 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
   }
 
 
-  ## optional plotting of Heatmap
+  ## plotting Heatmap using sigificant Proteins or peptides
   ## NOTE clustering distance c("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
 
-    ## creating heat map Data
-    if("Protein" %in% colnames(dataset)){
+  if("Protein" %in% colnames(dataset)){
 
-      HeatMapData <- dataset %>%
-        filter(Protein %in% TSignificantFeatures$Protein) %>%
-        group_by(Protein) %>%
-        mutate(Intensity = scale(Intensity, center = TRUE, scale = TRUE))
+    Heatmap <- HeatMap(datasetT, PoIs = TSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
 
-      ## Quantitative heat map data
-      HeatMapDataQuant <- HeatMapData %>%
-        pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
-        select(contains("_")) %>%
-        t() %>% as.matrix()
+  }
 
-      ## clinical heat map data
-      HeatMapDataClin <- HeatMapData %>%
-        pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
-        select(!contains("_"))
-    }
-    if("Peptide" %in% colnames(dataset)){
+  if("Peptide" %in% colnames(dataset)){
 
-      HeatMapData <- dataset %>%
-        filter(Peptide %in% TSignificantFeatures$Peptide) %>%
-        group_by(Peptide) %>%
-        mutate(Intensity = scale(Intensity, center = TRUE, scale = TRUE))
+    Heatmap <- HeatMap(datasetT, PoIs = TSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
 
-      ## Quantitative heat map data
-      HeatMapDataQuant <- HeatMapData %>%
-        pivot_wider(names_from = "Peptide", values_from = "Intensity") %>%
-        select(contains("_")) %>%
-        t() %>% as.matrix()
-
-      ## clinical heat map data
-      HeatMapDataClin <- HeatMapData %>%
-        pivot_wider(names_from = "Peptide", values_from = "Intensity") %>%
-        select(!contains("_"))
-
-    }
-
-    ## Annotations
-    ## for now only status is annotated
-    ## maybe i can find a general way to annotate all clinical variables
-    "colnames(HeatMapDataClin[1]) = HeatMapDataClin[1] works; need to find a way to generalize"
-
-    Annotation <- HeatmapAnnotation(
-      Status = HeatMapDataClin$Status
-    )
-
-    if(method == "supervised" | method == "Supervised"){
-
-      THeatMap <- ComplexHeatmap::Heatmap(HeatMapDataQuant,
-
-                                          ## Annotation stuff
-                                          top_annotation = Annotation,
-
-                                          ## clustering specifics
-                                          ## Clustering columns
-                                          cluster_columns = TRUE,
-                                          clustering_distance_columns = clustDist,
-
-                                          ## clustering Rows
-                                          cluster_rows = TRUE,
-                                          clustering_distance_rows = clustDist,
-                                          show_row_names = FALSE,
-
-                                          ## specify pacient status as main cluster
-                                          column_split = HeatMapDataClin$Status,
-
-                                          ## Changing Legend title
-                                          name = "z-score Int",
-
-                                          ## naming Plot
-                                          column_title = paste(plotname,"Supervised Heat map clustered by", clustDist)
-      )
-
-
-    }
-    if(method == "unsupervised" | method == "Unsupervised"){
-
-      THeatMap <- ComplexHeatmap::Heatmap(HeatMapDataQuant,
-
-                                          ## Annotations Stuff
-                                          top_annotation = Annotation,
-
-                                          ## clustering specifics
-                                          ## Clustering columns
-                                          cluster_columns = TRUE,
-                                          clustering_distance_columns = "euclidean",
-
-
-                                          ## clustering Rows
-                                          cluster_rows = TRUE,
-                                          clustering_distance_rows = clustDist,
-                                          show_row_names = FALSE,
-
-                                          ## Change legend title
-                                          name = "z-score Int",
-
-                                          ## naming Plot
-                                          column_title = paste("Unsupervised Heat map", plotname, "clustered by", clustDist)
-
-      )
 
   }
 
@@ -1671,10 +1580,14 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
   Output <- list()
   Output$raw <- Tresults
   Output$Significant <- TSignificantFeatures
-  Output$Heatmap <- THeatMap
+  Output$Heatmap <- Heatmap
   Output$Vulcanoplot <- vulcanoPlot
 
+  return(Output)
 }
+
+
+
 
 ## Wilcox test for significance
 ## add roxygen comments
