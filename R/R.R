@@ -29,6 +29,7 @@
 #' @import magrittr
 #' @import igraph
 #' @import Rtsne
+#' @import grid
 
 ## Data Import and Management
 ## add roxygen comments
@@ -1376,7 +1377,7 @@ FindNACutoff <- function(dataset, plotname = ""){
 TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean",p.adj.method = "BH"){
 
   ## Normalize data for T-Test
-  datasetT <- dataset
+  datasetT <- dataset %>% data.frame()
 
   ## setting up clinical variables
   Status1 <- unique(datasetT$Status)[1] %>% as.character()
@@ -1485,8 +1486,10 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       #First we spread (i.e. back to Wide format, but instead by clinical group)
       tidyr::pivot_wider(names_from = "Status", values_from = "Intensity")  %>%
       dplyr::group_by(Peptide) %>%
-      dplyr::summarise(ObsInStatus1 = sum(!is.na(.data[[Status1]])),
-                ObsInStatus2 = sum(!is.na(.data[[Status2]]))) %>%
+      dplyr::summarise(
+        ObsInStatus1 = sum(!is.na(.data[[Status1]])),
+        ObsInStatus2 = sum(!is.na(.data[[Status2]]))
+        ) %>%
 
       #Create a column where we say that all values need at least 2 to be considered for the statistical test.
       dplyr::mutate(possible = ifelse(ObsInStatus1 < 2 | ObsInStatus2 < 2 , FALSE, TRUE)) %>%
@@ -2689,8 +2692,8 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       ## naming Plot
       column_title = paste(plotname),
       ## adjust font size for row names
-      row_names_gp = gpar(fontsize = fontsize),
-      column_names_gp = gpar(fontsize = fontsize)
+      row_names_gp = grid::gpar(fontsize = fontsize),
+      column_names_gp = grid::gpar(fontsize = fontsize)
     )
   } else if (tolower(method) == "unsupervised") {
 
@@ -2714,8 +2717,8 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       ## naming Plot
       column_title = paste(plotname),
       ## adjust font size for row names
-      row_names_gp = gpar(fontsize = fontsize),
-      column_names_gp = gpar(fontsize = fontsize)
+      row_names_gp = grid::gpar(fontsize = fontsize),
+      column_names_gp = grid::gpar(fontsize = fontsize)
     )
   } else {
     stop("Invalid method. Choose either 'supervised' or 'unsupervised'.")
