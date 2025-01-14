@@ -4,15 +4,13 @@
 \alias{FisherTest}
 \title{FisherTest}
 \usage{
-FisherTest(dataset, plotname = "")
+FisherTest(dataset, p.adjust.method = "BH")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
-
-\item{plotname}{The name to be displayed on created plots}
 }
 \value{
-A list object containing the results of the Fisher test, the significant features and a volcano plot
+A list object containing the results of the Fisher test
 }
 \description{
 This function performs a Fisher test for differential expression analysis.

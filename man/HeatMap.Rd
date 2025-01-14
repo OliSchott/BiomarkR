@@ -17,7 +17,8 @@ HeatMap(
   cluster_columns = TRUE,
   Annotations = NULL,
   ColPalette = "Set1",
-  contColors = c("yellow", "purple")
+  contColors = c("yellow", "purple"),
+  fontsize = 8
 )
 }
 \arguments{
@@ -46,6 +47,8 @@ HeatMap(
 \item{ColPalette}{The color palette to be used for the annotations (Specified using the names of a color palette from the RColorBrewer package): https://www.aptech.com/releases/gauss18/graphics-updates/color-brewer-palettes/}
 
 \item{contColors}{The colors to be used for continuous annotations of numeric columns (Input is a vector of colors, example c("green", "red"))}
+
+\item{fontsize}{The fontsize to be used for the annotations (numeric value)}
 }
 \value{
 A Heatmap object

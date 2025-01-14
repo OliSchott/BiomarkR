@@ -4,7 +4,7 @@
 \alias{ROC}
 \title{ROC}
 \usage{
-ROC(dataset, PoI)
+ROC(dataset, PoI, plotname = "")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
