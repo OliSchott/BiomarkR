@@ -1914,7 +1914,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 
     for (i in 1:length(ContingencyTable)) {
       ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
-        dplyr::select(-Protein) %>%
+        dplyr::select(-c("Protein", "Total")) %>%
         tibble::column_to_rownames("Status") %>%
         as.matrix()
 
@@ -1942,11 +1942,9 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
     ## Create contingency table
     ContingencyTable <- DataForFisher %>%
       dplyr::group_by(Peptide, Status) %>%
-      dplyr::summarise(
-        Total = n(),                                # Total rows in each group
-        Missing = sum(is.na(Intensity)),            # Rows with NA in Intensity
-        .groups = 'drop'
-      ) %>%
+      dplyr::summarise(Total = dplyr::n(),
+                       Missing = sum(is.na(Intensity)), .groups = 'drop',
+                       Count = Total - Missing) %>%
       split(.$Peptide)
 
     ## Run Fisher Test
@@ -1954,7 +1952,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 
     for (i in 1:length(ContingencyTable)) {
       ConfusionMatrix <- as.data.frame(ContingencyTable[[i]]) %>%
-        dplyr::select(-Peptide) %>%
+        dplyr::select(-c("Peptide", "Total")) %>%
         tibble::column_to_rownames("Status") %>%
         as.matrix() %>% t()
 
