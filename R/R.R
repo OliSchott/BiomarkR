@@ -1371,8 +1371,9 @@ FindNACutoff <- function(dataset, plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @param method The method to be used for the Heatmap (unsupervised, supervised)
 #' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
+#' @param p.adj.method The method to be used for p-value adjustment ("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @export
-TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean"){
+TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean",p.adj.method = "BH"){
 
   ## Normalize data for T-Test
   datasetT <- dataset
@@ -1395,80 +1396,81 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       select(c("Sample", "Status", "Protein", "Intensity")) %>%
 
       #First we spread (i.e. back to Wide format, but instead by clinical group)
-      pivot_wider(names_from = "Status", values_from = "Intensity")  %>%
-      group_by(Protein) %>%
-      summarise(ObsInStatus1 = sum(!is.na(.data[[Status1]])),
+      tidyr::pivot_wider(names_from = "Status", values_from = "Intensity")  %>%
+      dplyr::group_by(Protein) %>%
+      dplyr::summarise(ObsInStatus1 = sum(!is.na(.data[[Status1]])),
                 ObsInStatus2 = sum(!is.na(.data[[Status2]]))) %>%
 
       #Create a column where we say that all values need at least 2 to be considered for the statistical test.
-      mutate(possible = ifelse(ObsInStatus1 < 2 | ObsInStatus2 < 2 , FALSE, TRUE)) %>%
-      filter(possible)
+      dplyr::mutate(possible = ifelse(ObsInStatus1 < 2 | ObsInStatus2 < 2 , FALSE, TRUE)) %>%
+      dplyr::filter(possible)
 
     Tresults <- datasetT %>% filter(Protein %in% filter$Protein) %>%
-      group_by(Protein) %>%
-      t_test(Intensity ~ Status, detailed = T) %>%
-      adjust_pvalue(method = "BH") %>%
+      dplyr::group_by(Protein) %>%
+      rstatix::t_test(Intensity ~ Status, detailed = T) %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
 
       #Split the Protein name in Uniprot and Gene
-      mutate(UniprotID = str_split_i(Protein, pattern = "_", 1)) %>%
-      mutate(Gene = str_split_i(Protein, pattern = "_", 2)) %>%
+      dplyr::mutate(UniprotID = str_split_i(Protein, pattern = "_", 1)) %>%
+      dplyr::mutate(Gene = str_split_i(Protein, pattern = "_", 2)) %>%
 
       #Determine Fold change. Since we work with log-transformed values we can just substract
-      mutate(FC = estimate1 - estimate2) %>%
+      dplyr::mutate(FC = estimate1 - estimate2) %>%
 
       #Create log10 p-vals
-      mutate(log10adjustP = -1*log10(p.adj)) %>%
+      dplyr::mutate(log10adjustP = -1*log10(p.adj)) %>%
 
       #Determine if up or down regulated
-      mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
+      dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Create dataframe of significant Proteins in global environment
     TSignificantFeatures <- Tresults %>%
-      filter(p.adj < 0.05) %>% arrange(p.adj) %>%
+      dplyr::filter(p.adj < 0.05) %>%
+      dplyr::arrange(p.adj) %>%
       data.frame() %>%
-      mutate(Protein = paste0(UniprotID, "_", Gene))
+      dplyr::mutate(Protein = paste0(UniprotID, "_", Gene))
 
     print(paste(nrow(TSignificantFeatures), "Significant proteins have been identified"))
 
 
       ## Volcano plot of results
-      vulcanoPlot <- ggplot(data = Tresults) +
+      vulcanoPlot <- ggplot2::ggplot(data = Tresults) +
 
         ## add non significant Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "NotSignificant")),
                    aes(x = FC, y = log10adjustP, fill = "NotSignificant"))+
 
         ## add Up Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "Up")),
                    aes(x = FC, y = log10adjustP, fill = "Up"))+
 
         ## add Down Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "Down")),
                    aes(x = FC, y = log10adjustP, fill = "Down"))+
 
         ## add colours to fills
-        scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
+        ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
 
         ## add lines for 5 an 1 % significance
         ## 5 % significance
-        geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
+        ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
 
         ## 1 % significance
-        geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
+        ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
 
         ## Add Point lalbes
-        geom_text(data = subset(Tresults, log10adjustP > 1.3), aes(label = Gene, x = FC, y = log10adjustP), vjust = 0.5, hjust = -0.2, size = 3, angle = 30) +
+        ggplot2::geom_text(data = subset(Tresults, log10adjustP > 1.3), aes(label = Gene, x = FC, y = log10adjustP), vjust = 0.5, hjust = -0.2, size = 3, angle = 30) +
 
         ## Add title
-        ggtitle(paste("Volcano plot TTest", plotname)) +
+        ggplot2::ggtitle(paste("Volcano plot TTest", plotname)) +
 
         ## Add x-Axis label
-        xlab(paste("Fold change in", unique(Tresults$group1)))+
+        ggplot2::xlab(paste("Fold change in", unique(Tresults$group1)))+
 
-        theme_light(base_size = 13)
+        ggplot2::theme_light(base_size = 13)
 
 
 
@@ -1478,83 +1480,85 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
     ## Making sure we have at least 2 Observations per group
     ## Here its important that we remove any clinical factor. Thus we only select the columns we really need!
     filter <- datasetT %>%
-      select(c("Sample", "Status", "Peptide", "Intensity")) %>%
+      dplyr::select(c("Sample", "Status", "Peptide", "Intensity")) %>%
 
       #First we spread (i.e. back to Wide format, but instead by clinical group)
-      pivot_wider(names_from = "Status", values_from = "Intensity")  %>%
-      group_by(Peptide) %>%
-      summarise(ObsInStatus1 = sum(!is.na(.data[[Status1]])),
+      tidyr::pivot_wider(names_from = "Status", values_from = "Intensity")  %>%
+      dplyr::group_by(Peptide) %>%
+      dplyr::summarise(ObsInStatus1 = sum(!is.na(.data[[Status1]])),
                 ObsInStatus2 = sum(!is.na(.data[[Status2]]))) %>%
 
       #Create a column where we say that all values need at least 2 to be considered for the statistical test.
-      mutate(possible = ifelse(ObsInStatus1 < 2 | ObsInStatus2 < 2 , FALSE, TRUE)) %>%
-      filter(possible)
+      dplyr::mutate(possible = ifelse(ObsInStatus1 < 2 | ObsInStatus2 < 2 , FALSE, TRUE)) %>%
+      dplyr::filter(possible)
 
     Tresults <- datasetT %>% filter(dataset$Peptide %in% filter$Peptide) %>%
-      group_by(Peptide) %>%
-      t_test(Intensity ~ Status, detailed = T) %>%
+      dplyr::group_by(Peptide) %>%
+      rstatix::t_test(Intensity ~ Status, detailed = T) %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
       ## Adjusting p-values for multiple testing
       dplyr::mutate(Gene = stringr::str_split_i(Peptide, pattern = "_", 2)) %>%
       dplyr::mutate(p.adj = p * length(unique(Gene))) %>%
 
       #Split the Peptide name in Uniprot and Gene
-      mutate(UniprotID = str_split_i(Peptide, pattern = "_", 1)) %>%
-      mutate(Gene = str_split_i(Peptide, pattern = "_", 2)) %>%
+      dplyr::mutate(UniprotID = str_split_i(Peptide, pattern = "_", 1)) %>%
+      dplyr::mutate(Gene = str_split_i(Peptide, pattern = "_", 2)) %>%
 
       #Determine Fold change. Since we work with log-transformed values we can just substract
-      mutate(FC = estimate1 - estimate2) %>%
+      dplyr::mutate(FC = estimate1 - estimate2) %>%
 
       #Create log10 p-vals
-      mutate(log10adjustP = -1*log10(p.adj)) %>%
+      dplyr::mutate(log10adjustP = -1*log10(p.adj)) %>%
 
       #Determine if up or down regulated
-      mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
+      dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Create dataframe of significant Peptides in global environment
     TSignificantFeatures <- Tresults %>%
-      filter(p.adj < 0.05) %>% arrange(p.adj) %>%
+      dplyr::filter(p.adj < 0.05) %>%
+      dplyr::arrange(p.adj) %>%
       data.frame()
 
     print(paste(nrow(TSignificantFeatures), "Significant Peptides have been identified"))
 
       ## Volcano plot of results
-      vulcanoPlot <- ggplot(data = Tresults) +
+      vulcanoPlot <- ggplot2::ggplot(data = Tresults) +
 
         ## add non significant Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "NotSignificant")),
                    aes(x = FC, y = log10adjustP, fill = "NotSignificant"))+
 
         ## add Up Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "Up")),
                    aes(x = FC, y = log10adjustP, fill = "Up"))+
 
         ## add Down Poitns
-        geom_point(size = 3.5, shape = 21,
+        ggplot2::geom_point(size = 3.5, shape = 21,
                    data = subset(Tresults ,(Direction == "Down")),
                    aes(x = FC, y = log10adjustP, fill = "Down"))+
 
         ## add colours to fills
-        scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
+        ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
 
         ## add lines for 5 an 1 % significance
         ## 5 % significance
-        geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
+        ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
 
         ## 1 % significance
-        geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
+        ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
 
         ## Add Point lalbes
-        geom_text(data = subset(Tresults, log10adjustP > 1.3), aes(label = Gene, x = FC, y = log10adjustP), vjust = 0.5, hjust = -0.2, size = 3, angle = 30) +
+        ggplot2::geom_text(data = subset(Tresults, log10adjustP > 1.3), aes(label = Gene, x = FC, y = log10adjustP), vjust = 0.5, hjust = -0.2, size = 3, angle = 30) +
 
         ## Add title
-        ggtitle(paste("Volcano plot TTest", plotname)) +
+        ggplot2::ggtitle(paste("Volcano plot TTest", plotname)) +
 
         ## Add x-Axis label
-        xlab(paste("Fold change in", unique(Tresults$group1)))+
+        ggplot2::xlab(paste("Fold change in", unique(Tresults$group1)))+
 
-        theme_light(base_size = 13)
+        ggplot2::theme_light(base_size = 13)
 
   }
 
@@ -1564,13 +1568,13 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   if("Protein" %in% colnames(dataset)){
 
-    Heatmap <- HeatMap(datasetT, PoIs = TSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetT, PoIs = TSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
 
   }
 
   if("Peptide" %in% colnames(dataset)){
 
-    Heatmap <- HeatMap(datasetT, PoIs = TSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetT, PoIs = TSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
 
 
   }
@@ -1585,7 +1589,6 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   return(Output)
 }
-
 
 
 
