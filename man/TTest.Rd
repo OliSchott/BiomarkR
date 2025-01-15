@@ -4,7 +4,13 @@
 \alias{TTest}
 \title{TTest}
 \usage{
-TTest(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean")
+TTest(
+  dataset,
+  plotname = "",
+  method = "unsupervised",
+  clustDist = "euclidean",
+  p.adj.method = "BH"
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -14,6 +20,8 @@ TTest(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean")
 \item{method}{The method to be used for the Heatmap (unsupervised, supervised)}
 
 \item{clustDist}{The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")}
+
+\item{p.adj.method}{The method to be used for p-value adjustment ("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")}
 }
 \description{
 This function performs differential expression analysis using a T-Test.
