@@ -10,7 +10,8 @@ PCA(
   plotname = "PCA",
   PoIs = "",
   plotTopNLoading = TRUE,
-  topNLoading = 3
+  topNLoading = 3,
+  show_ellipse = F
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ PCA(
 \item{plotTopNLoading}{Logical value indicating if the top 3 loadings should be plotted}
 
 \item{topNLoading}{The number of top loadings to be plotted}
+
+\item{show_ellipse}{Logical value indicating if the 95\% confidence ellipse should be plotted}
 }
 \value{
 A list object containing the results of the PCA calculations and the PCA plot

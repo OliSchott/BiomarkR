@@ -2925,9 +2925,10 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param PoIs The protein or peptide of interest
 #' @param plotTopNLoading Logical value indicating if the top 3 loadings should be plotted
 #' @param topNLoading The number of top loadings to be plotted
+#' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F){
 
   if("Protein" %in% colnames(dataset)){
 
@@ -3002,7 +3003,6 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
     geom_jitter() +
     facet_wrap(~ PCAPlotData$facet, axis.labels = "all") +
-    stat_ellipse()+
     ggtitle(plotname, paste0(
       "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
       "PC2: ",round(VarianceExplained[2],2)*100, " %, ",
@@ -3014,7 +3014,10 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
     theme_light(base_size = 13) +
     ## make facet title background white and text black
     theme(strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black"))
+          strip.text = element_text(colour = "black")) +
+    if(show_ellipse == T){
+      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+    }
 
 
   ## Making 3D score plot
@@ -3118,9 +3121,10 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 #' @description Uniform Manifold Approximation and Projection for the specified dataset.
 #' @param dataset The dataset to be plotted
 #' @param plotname The name to be displayed on created plots
+#' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the UMAP calculations and the UMAP plot
 #' @export
-UMAP <- function(dataset, plotname = "") {
+UMAP <- function(dataset, plotname = "", show_ellipse = F) {
 
   ## error of missing values in Intensity column
   if (base::any(base::is.na(dataset$Intensity))) {
@@ -3204,12 +3208,15 @@ UMAP <- function(dataset, plotname = "") {
   UMAPPlot2D <- ggplot2::ggplot(UMAPPlotData2D, ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, colour = Status)) +
     ggplot2::geom_jitter() +
     ggplot2::facet_wrap(~facet, axis.labels = "all") +
-    ggplot2::stat_ellipse() +
     ggplot2::ylab("") +
     ggplot2::xlab("") +
     ggplot2::theme_light(base_size = 13) +
     ggplot2::theme(strip.background = ggplot2::element_rect(fill = "white"),
-                   strip.text = ggplot2::element_text(colour = "black"))
+                   strip.text = ggplot2::element_text(colour = "black")) +
+    ## add ellipses
+    if(show_ellipse == T){
+      ggplot2::geom_ellipse(ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, color = Status), level = 0.95, linetype = 2)
+    }
 
   ## 3D Plot Data
   UMAPPlotData <- base::data.frame(Sample = base::row.names(UMAP$layout),
@@ -3241,9 +3248,10 @@ UMAP <- function(dataset, plotname = "") {
 #' @description t-distributed Stochastic Neighbor Embedding for the specified dataset.
 #' @param dataset The dataset to be plotted
 #' @param plotname The name to be displayed on created plots
+#' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the tSNE calculations and the tSNE plot
 #' @export
-tSNE <- function(dataset, plotname = "") {
+tSNE <- function(dataset, plotname = "", show_ellipse = F) {
 
   ## Error if missing values in object
   if (any(is.na(dataset$Intensity))) {
@@ -3315,13 +3323,16 @@ tSNE <- function(dataset, plotname = "") {
   tSNEPlot2D <- ggplot2::ggplot(tSNEPlotData, ggplot2::aes(x = PlotDim1, y = PlotDim2, colour = Status)) +
     ggplot2::geom_jitter() +
     ggplot2::facet_wrap(~facet, labeller = "label_value") +
-    ggplot2::stat_ellipse() +
     ggplot2::ylab("") +
     ggplot2::xlab("") +
     ggplot2::theme_light(base_size = 13) +
     ggplot2::theme(strip.background = ggplot2::element_rect(fill = "white"),
                    strip.text = ggplot2::element_text(colour = "black")) +
-    ggplot2::ggtitle(plotname)
+    ggplot2::ggtitle(plotname) +
+    ## optional ellipse
+    if(show_ellipse == T){
+      ggplot2::geom_ellipse(ggplot2::aes(x = PlotDim1, y = PlotDim2, color = Status), level = 0.95, linetype = 2)
+    }
 
   ## Making 3D score plot
   PlotData3ED <- data.frame(Sample = row.names(tSNEData),

@@ -4,12 +4,14 @@
 \alias{UMAP}
 \title{UMAP}
 \usage{
-UMAP(dataset, plotname = "")
+UMAP(dataset, plotname = "", show_ellipse = F)
 }
 \arguments{
 \item{dataset}{The dataset to be plotted}
 
 \item{plotname}{The name to be displayed on created plots}
+
+\item{show_ellipse}{Logical value indicating if the 95\% confidence ellipse should be plotted}
 }
 \value{
 A list object containing the results of the UMAP calculations and the UMAP plot
