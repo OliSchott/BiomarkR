@@ -1019,8 +1019,10 @@ CompletenessAnalysis <- function(dataset){
 
   ## plot Results using ggplot2
   Plot <- ggplot2::ggplot(Results, ggplot2::aes(x = Cutoff, y = UniqueProteins)) +
-    ggplot2::geom_point() +
-    ggplot2::geom_smooth() +
+    ggplot2::geom_point(size = 5) +
+    ggplot2::geom_line(linewidth = 1, color = "blue") +
+    ## remove ribbon
+    ggplot2::geom_ribbon(aes(ymin = UniqueProteins, ymax = UniqueProteins), alpha = 0) +
     ggplot2::labs(title = "Completeness Analysis",
                   x = "Percent completeness",
                   y = "Unique Proteins") +
@@ -3019,6 +3021,20 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
     }
 
+  ScorePlot_12 <- ggplot(PCAPlotData12, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
+    geom_jitter() +
+    ggtitle(plotname) +
+    ylab(paste0("PC2 (", round(VarianceExplained[2],2)*100, " %)")) +
+    ## name x axis properly
+    xlab(paste0("PC1 (", round(VarianceExplained[1],2)*100, " %)")) +
+    theme_light(base_size = 13) +
+    ## make facet title background white and text black
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
+    if(show_ellipse == T){
+      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+    }
+
 
   ## Making 3D score plot
   ## extracting scores for the first three principal components
@@ -3110,6 +3126,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   Output$Loadingplot <- loadingPlot
   Output$PCA <- PCA
   Output$ScorePlot3D <- ScorePlot3D
+  Output$ScorePlot_12 <- ScorePlot_12
 
   return(Output)
 }
@@ -3219,6 +3236,23 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
       ggplot2::geom_ellipse(ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, color = Status), level = 0.95, linetype = 2)
     }
 
+
+  UMAPPlotData12 <- UMAPPlotData2D %>% filter(facet == "UMAP1 (x) on UMAP2 (y)")
+
+  UMAPPlot_12 <- ggplot(UMAPPlotData12, aes(x =PlotUMAP1 , y = PlotUMAP2, colour = Status)) +
+    geom_jitter() +
+    ggtitle(plotname) +
+    ylab("UMAP2") +
+    ## name x axis properly
+    xlab("UMAP1") +
+    theme_light(base_size = 13) +
+    ## make facet title background white and text black
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
+    if(show_ellipse == T){
+      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+    }
+
   ## 3D Plot Data
   UMAPPlotData <- base::data.frame(Sample = base::row.names(UMAP$layout),
                                    UMAP1 = UMAP$layout[, 1],
@@ -3236,7 +3270,8 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
   # Creating Output Object
   Output <- base::list(UMAP = UMAP,
                        UMAPPlot2D = UMAPPlot2D,
-                       UMAPPlot3D = UMAPPlot3D)
+                       UMAPPlot3D = UMAPPlot3D,
+                       UMAPPlot_12 = UMAPPlot_12)
 
   return(Output)
 }
@@ -3335,6 +3370,25 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
       ggplot2::geom_ellipse(ggplot2::aes(x = PlotDim1, y = PlotDim2, color = Status), level = 0.95, linetype = 2)
     }
 
+  ## make plot with only the first 2 tSNE components
+  tSNEPlotData_12 <- tSNEPlotData %>% filter(facet == "Dim1 (x) on Dim2 (y)")
+
+  tSNEPlot_12 <- ggplot(tSNEPlotData_12, aes(x =PlotDim1 , y = PlotDim2, colour = Status)) +
+    geom_jitter() +
+    ggtitle(plotname) +
+    ylab("Dim2") +
+    ## name x axis properly
+    xlab("Dim1") +
+    theme_light(base_size = 13) +
+    ## make facet title background white and text black
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
+    if(show_ellipse == T){
+      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+    }
+
+
+
   ## Making 3D score plot
   PlotData3ED <- data.frame(Sample = row.names(tSNEData),
                             Dim1 = tSNEResult$Y[, 1],
@@ -3352,7 +3406,8 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
   ## Make output list
   Output <- list(tSNE = tSNEResult,
                  ScorePlot2D = tSNEPlot2D,
-                 ScorePlot3D = tSNEPlot3D)
+                 ScorePlot3D = tSNEPlot3D,
+                 tSNEPlot_12 = tSNEPlot_12)
 
   return(Output)
 }
