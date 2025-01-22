@@ -3213,6 +3213,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
     ggplot2::theme_light(base_size = 13) +
     ggplot2::theme(strip.background = ggplot2::element_rect(fill = "white"),
                    strip.text = ggplot2::element_text(colour = "black")) +
+    ggtitle(plotname)+
     ## add ellipses
     if(show_ellipse == T){
       ggplot2::geom_ellipse(ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, color = Status), level = 0.95, linetype = 2)
