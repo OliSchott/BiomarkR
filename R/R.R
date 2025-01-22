@@ -3237,7 +3237,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
     }
 
 
-  UMAPPlotData12 <- UMAPPlotData2D %>% filter(facet == "UMAP1 (x) on UMAP2 (y)")
+  UMAPPlotData12 <- UMAPPlotData2D %>% dplyr::filter(facet == "UMAP1 (x) on UMAP2 (y)")
 
   UMAPPlot_12 <- ggplot(UMAPPlotData12, aes(x =PlotUMAP1 , y = PlotUMAP2, colour = Status)) +
     geom_jitter() +
@@ -3371,7 +3371,7 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
     }
 
   ## make plot with only the first 2 tSNE components
-  tSNEPlotData_12 <- tSNEPlotData %>% filter(facet == "Dim1 (x) on Dim2 (y)")
+  tSNEPlotData_12 <- tSNEPlotData %>% dplyr::filter(facet == "Dim1 (x) on Dim2 (y)")
 
   tSNEPlot_12 <- ggplot(tSNEPlotData_12, aes(x =PlotDim1 , y = PlotDim2, colour = Status)) +
     geom_jitter() +
