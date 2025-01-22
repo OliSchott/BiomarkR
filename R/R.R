@@ -2422,24 +2422,16 @@ ROC <- function(dataset, PoI, plotname = ""){
   ## plot ROC curve using ggplot2
   AUC <- round(pROC::auc(roc_curve), 2)
 
-  ROCPlotData <- data.frame(Sensitivity = roc_curve$sensitivities,Specificity = roc_curve$specificities)
-
-  roc_plot <- ggplot2::ggplot(ROCPlotData) +
-    ggplot2::geom_line(aes(x = 1 - Specificity, y = Sensitivity), color = "black", linewidth = 1.5) +
-    ## add red line at 1:1
-    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red",linewidth = 1.5) +
-    ## fix y axis from 0 to 1
-    ggplot2::scale_y_continuous(limits = c(0, 1)) +
-    ## fix x axis from 0 to 1
-    ggplot2::scale_x_continuous(limits = c(0, 1)) +
-    ## title y axis
-    ggplot2::ylab("Sensitivity") +
-    ## title x axis
-    ggplot2::xlab("1 - Specificity") +
-    ## change title
-    ggplot2::ggtitle(plotname, paste("AUC: ", AUC)) +
-    ## theme minimal
-    ggplot2::theme_minimal()
+  # Customizing aesthetics within ggroc
+  roc_plot <- pROC::ggroc(roc_curve, size = 1.2, color = "black") + # Set line size and color
+    theme_minimal() +                         # Use a minimal theme
+    labs(
+      title = "ROC Curve",                    # Add a title
+      x = "1 - Specificity",
+      y = "Sensitivity"
+    ) +
+    ggplot2::geom_abline(intercept = 1, slope = 1, linetype = "dashed", colour = "red", linewidth = 1.5) + # Add a diagonal line
+    ggplot2::ggtitle(plotname, paste("AUC:", AUC))
 
   ## create output list
   output <- list(ROC_Plot = roc_plot,
@@ -4178,7 +4170,7 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
     predictions <- stats::predict(glm_model, MLData) # Predicted probabilities for the positive class
     actuals <- factor(MLData$Status)
     Confusion_Matrix <-caret::confusionMatrix(predictions, actuals)
-    }
+  }
 
 
 
@@ -4224,31 +4216,26 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   ## plot ROC curve using ggplot
   AUC <- base::round(pROC::auc(roc_curve), 2)
 
-  ROCPlotData <- data.frame(Sensitivity = roc_curve$sensitivities,Specificity = roc_curve$specificities)
 
-  roc_plot <- ggplot2::ggplot(ROCPlotData) +
-    ggplot2::geom_line(aes(x = 1 - Specificity, y = Sensitivity), color = "black", linewidth = 1) +
-    ## add red line at 1:1
-    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red",linewidth = 1.5) +
-    ## fix y axis from 0 to 1
-    ggplot2::scale_y_continuous(limits = c(0, 1)) +
-    ## fix x axis from 0 to 1
-    ggplot2::scale_x_continuous(limits = c(0, 1)) +
-    ## title y axis
-    ggplot2::ylab("Sensitivity") +
-    ## title x axis
-    ggplot2::xlab("1 - Specificity") +
-    ## change title
-    ggplot2::ggtitle(plotname, paste("AUC: ", AUC)) +
-    ## theme minimal
-    ggplot2::theme_minimal()
-
+  # Customizing aesthetics within ggroc
+  roc_plot <- pROC::ggroc(roc_curve, size = 1.2, color = "black") + # Set line size and color
+    theme_minimal() +                         # Use a minimal theme
+    labs(
+      title = "ROC Curve",                    # Add a title
+      x = "1 - Specificity",
+      y = "Sensitivity"
+    ) +
+    ggplot2::geom_abline(intercept = 1, slope = 1, linetype = "dashed", colour = "red", linewidth = 1.5) + # Add a diagonal line
+    ggplot2::ggtitle(plotname, paste("AUC:", AUC))
   ## add shaded confidence interval if cross validation == TRUE
+
   if(crossvalidation == T){
-      roc_plot <- roc_plot +
-      ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1)+
-      ggplot2::ggtitle(plotname, paste("AUC:", AUC, " B1 ", round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
-      }
+    roc_plot <- roc_plot +
+      ggplot2::geom_ribbon(data = ci_band, aes(x = specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1)+
+      ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
+  }
+
+
 
 
   ## Create a list of all the output
@@ -4259,7 +4246,6 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
 
   return(output)
 }
-
 
 ## Random forest
 ## add roxygen comments
