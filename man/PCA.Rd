@@ -11,7 +11,8 @@ PCA(
   PoIs = "",
   plotTopNLoading = TRUE,
   topNLoading = 3,
-  show_ellipse = F
+  show_ellipse = F,
+  ColPalette = "Set1"
 )
 }
 \arguments{

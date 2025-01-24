@@ -340,10 +340,11 @@ ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protei
         ## Creating output dataframe
         dataset <- dataset %>%
           dplyr::group_by(Modified.Sequence) %>%
+          ## if there is no gene make one up
           dplyr::mutate(Genes = ifelse(base::is.na(Genes), stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]"), Genes)) %>%
           dplyr::ungroup() %>%
-          dplyr::select(-c("Protein.Group", "Protein.Names", "First.Protein.Description", "Proteotypic", "Stripped.Sequence", "Precursor.Id", "Protein.Group", "Protein.Ids")) %>%
-          dplyr::mutate(Peptide = base::paste0(Modified.Sequence, "_", Genes)) %>%
+          dplyr::mutate(Peptide = base::paste0(Protein.Group,"_", Modified.Sequence, "_", Genes)) %>%
+          dplyr::select(-c("Protein.Names", "First.Protein.Description", "Proteotypic", "Stripped.Sequence", "Precursor.Id", "Protein.Group", "Protein.Ids")) %>%
           dplyr::select(-c(Modified.Sequence, Genes)) %>%
           tidyr::pivot_longer(names_to = "Sample", values_to = "Intensity", cols = -c("Precursor.Charge", "Peptide")) %>%
           dplyr::mutate(Peptide = base::paste0(Peptide, "_", Precursor.Charge)) %>%
@@ -630,6 +631,28 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
   }
 
   return(FilteredData)
+}
+
+## assign_colors
+## a function to assign colors from a Brewer’s palette to entries in a vector
+## add roxygen comments
+#' @title assign_colors
+#' @description This function assigns colors from a Brewer’s palette to entries in a vector
+#' @param unique_entries A vector of unique entries (like unique(dataset$Status))
+#' @param palette The name of the Brewer palette to be used (default = "Set1")
+#' @return A color mapping
+#' @export
+assign_colors <- function(unique_entries, palette = "Set1") {
+  # Get the Set1 palette
+  palette <- RColorBrewer::brewer.pal(max(length(unique_entries), 9), palette)
+
+  # Ensure the number of colors matches the number of unique entries
+  palette <- rep(palette, length.out = length(unique_entries))
+
+  # Assign colors to each unique entry
+  color_mapping <- stats::setNames(palette, unique_entries)
+
+  return(color_mapping)
 }
 
 
@@ -1490,7 +1513,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       dplyr::mutate(p.adj = p * length(unique(Gene))) %>%
       dplyr::mutate(
         UniprotID = stringr::str_split_i(Peptide, pattern = "_", 1),
-        Gene = stringr::str_split_i(Peptide, pattern = "_", 2),
+        Gene = stringr::str_split_i(Peptide, pattern = "_", 3),
         log10adjustP = -1 * log10(p.adj)
       )
 
@@ -1691,10 +1714,10 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       rstatix::wilcox_test(Intensity ~ Status, detailed = TRUE) %>%
       ## Adjusting p-values for multiple testing
       dplyr::mutate(Gene = stringr::str_split_i(Peptide, pattern = "_", 2)) %>%
-      dplyr::mutate(p.adj = p * length(unique(Gene))) %>%
+      rstatix::adjust_pvalue(method = p.adj.method) %>%
       dplyr::mutate(
         UniprotID = stringr::str_split_i(Peptide, pattern = "_", 1),
-        Gene = stringr::str_split_i(Peptide, pattern = "_", 2),
+        Gene = stringr::str_split_i(Peptide, pattern = "_", 3),
         log10adjustP = -1 * log10(p.adj)
       )
 
@@ -2394,7 +2417,6 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 #' @param nCross The number of iterations for the cross validation
 #' @return A list object containing the results of the ROC calculations and a plot
 #' @export
-
 ROC <- function(dataset, PoI, plotname = ""){
 
   ## error of more than 2 classes
@@ -2453,11 +2475,18 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @export
 BoxPlotsFeatures <- function(dataset, PoIs, plotname = "") {
 
+  ## generate colors
+  colors <- assign_colors(unique(dataset$Status))
+
   if ("Protein" %in% colnames(dataset)) {
     BoxPlotData <- dataset %>%
       dplyr::filter(Protein %in% PoIs)
 
+
+
     Boxplot <- ggplot2::ggplot(data = BoxPlotData, ggplot2::aes(x = Status, y = Intensity, col = Status)) +
+      ## use colors
+      ggplot2::scale_color_manual(values = colors) +
       ggplot2::geom_violin() +
       ggplot2::geom_jitter() +
       ggplot2::facet_wrap(~Protein) +
@@ -2473,6 +2502,8 @@ BoxPlotsFeatures <- function(dataset, PoIs, plotname = "") {
       dplyr::filter(Peptide %in% PoIs)
 
     Boxplot <- ggplot2::ggplot(data = BoxPlotData, ggplot2::aes(x = Status, y = Intensity, col = Status)) +
+      ## use colors
+      ggplot2::scale_color_manual(values = colors) +
       ggplot2::geom_violin() +
       ggplot2::geom_jitter() +
       ggplot2::facet_wrap(~Peptide) +
@@ -2606,10 +2637,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       colors <- colorRamp2(c(min_val, max_val), c(contColors[1], contColors[2]))
     } else {
       # For categorical data, use qualitative color palette
-      nColors <- ifelse(length(annotation_levels) > 3, length(annotation_levels), 3)
-      palette <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(nColors, ColPalette))
-      colors <- palette(length(annotation_levels))
-      names(colors) <- annotation_levels
+      colors <- assign_colors(annotation_levels, ColPalette)
     }
 
     return(colors)
@@ -2922,21 +2950,21 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F, ColPalette = "Set1"){
 
   if("Protein" %in% colnames(dataset)){
 
     PCAData <- dataset %>%
       ## making sure every column has entries
-      NaCutoff(0.1) %>%
+      BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
-      ImputeFeatureIntensity(method = "halfmin") %>%
+      BiomarkR::ImputeFeatureIntensity(method = "halfmin") %>%
       ## Normalize on sample
-      normalizeIntensityOnSample(plot = F) %>%
+      BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
-      select("Protein", "Intensity", "Status", "Sample") %>%
+      dplyr::select("Protein", "Intensity", "Status", "Sample") %>%
       ## pivoting wider
-      pivot_wider(names_from = "Protein", values_from = "Intensity")
+      tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity")
 
     ## Calculating PCA
     PCA <- pcaMethods::pca(select(PCAData, contains("_")), nPcs = 3)
@@ -2948,41 +2976,41 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 
     PCAData <- dataset %>%
       ## making sure every column has entries
-      NaCutoff(0.1) %>%
+      BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
-      ImputeFeatureIntensity(method = "halfmin") %>%
+      BiomarkR::ImputeFeatureIntensity(method = "halfmin") %>%
       ## Normalize on sample
-      normalizeIntensityOnSample(plot = F) %>%
+      BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
-      select("Peptide", "Intensity", "Status", "Sample") %>%
+      dplyr::select("Peptide", "Intensity", "Status", "Sample") %>%
       ## pivoting wider
-      pivot_wider(names_from = "Peptide", values_from = "Intensity")
+      tidyr::pivot_wider(names_from = "Peptide", values_from = "Intensity")
 
     ## Calculating PCA
     PCA <- pcaMethods::pca(select(PCAData, contains("_")), nPcs = 3)
 
   }
-  ## Plotting Results (optional)
 
-  ## Score Plot
+  ## Plotting Results
+  ## Faceted Score Plot
   PCAPlotData <- merge(PCA@scores, PCAData , by = 0)
   ## splitting into three dataframes for plotting reasons
   ## Only PC1 and PC 2
   PCAPlotData12 <- PCAPlotData %>%
-    select(-c("PC3")) %>%
-    mutate(facet = "PC1 (x) on PC2 (y)")
+    dplyr::select(-c("PC3")) %>%
+    dplyr::mutate(facet = "PC1 (x) on PC2 (y)")
   colnames(PCAPlotData12)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Only PC1 and PC 3
   PCAPlotData13 <- PCAPlotData %>%
-    select(-c("PC2")) %>%
-    mutate(facet = "PC1 (x) on PC3 (y)")
+    dplyr::select(-c("PC2")) %>%
+    dplyr::mutate(facet = "PC1 (x) on PC3 (y)")
   colnames(PCAPlotData13)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Only PC2 and PC 3
   PCAPlotData23 <- PCAPlotData %>%
-    select(-c("PC1")) %>%
-    mutate(facet = "PC2 (x) on PC3 (y)")
+    dplyr::select(-c("PC1")) %>%
+    dplyr::mutate(facet = "PC2 (x) on PC3 (y)")
   colnames(PCAPlotData23)[2:3] <- c("PlotPC1", "PlotPC2")
 
   ## Recombining Dataframes in long format
@@ -2991,10 +3019,13 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   ## get variance explained
   VarianceExplained <- PCA@R2
 
-  ## make lables for the facet axes
+  ## assign colors to the status variable
+  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
 
   ## making Score plot
   scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
+    ## use colors for Status
+    scale_color_manual(values = colors) +
     geom_jitter() +
     facet_wrap(~ PCAPlotData$facet, axis.labels = "all") +
     ggtitle(plotname, paste0(
@@ -3014,6 +3045,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
     }
 
   ScorePlot_12 <- ggplot(PCAPlotData12, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
+    scale_color_manual(values = colors) +
     geom_jitter() +
     ggtitle(plotname) +
     ylab(paste0("PC2 (", round(VarianceExplained[2],2)*100, " %)")) +
@@ -3030,15 +3062,31 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 
   ## Making 3D score plot
   ## extracting scores for the first three principal components
+  # Create the 3D Score Plot
   ScorePlot3D <- PCA@scores %>%
-    ## combine with sample information
+    ## Combine with sample information
     cbind(PCAData) %>%
-    ## make 3D score plot using plotly
-    plotly::plot_ly(x = ~PC1, y = ~PC2, z = ~PC3, color = ~Status, type = "scatter3d", mode = "markers") %>%
-    ## add text to the points
-    plotly::layout(scene = list(xaxis = list(title = "PC1"), yaxis = list(title = "PC2"), zaxis = list(title = "PC3"))) %>%
-    ## Add a title to the 3D plot
+    ## Make 3D score plot using plotly
+    plotly::plot_ly(
+      x = ~PC1,
+      y = ~PC2,
+      z = ~PC3,
+      color = ~Status,                     # Use Status for grouping
+      colors = colors[unique(dataset$Status)],     # Map Status levels to the pre-generated colors
+      type = "scatter3d",
+      mode = "markers"
+    ) %>%
+    ## Add axis titles
+    plotly::layout(
+      scene = list(
+        xaxis = list(title = "PC1"),
+        yaxis = list(title = "PC2"),
+        zaxis = list(title = "PC3")
+      )
+    ) %>%
+    ## Add a plot title
     plotly::layout(title = paste("3D Score plot", plotname))
+
 
 
   ## loading plot
@@ -3094,22 +3142,22 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   LoadingPlotData <- rbind(LoadingPlotData12, LoadingPlotData13, LoadingPlotData23) %>%
     dplyr::mutate(Gene = str_split_i(Protein, "_", 2))
 
-  loadingPlot <- ggplot(LoadingPlotData, aes(x = PlotPC1, y = PlotPC2, label = Protein, colour = var)) +
-    facet_wrap(~ facet) +
-    geom_segment(aes(x = 0, y = 0, xend = PlotPC1, yend = PlotPC2), arrow = arrow(type = "closed", length = unit(0.05, "inches"))) +  # Lines from origin
-    geom_text_repel(aes(label = Gene), size = 4) +  # Optional: Add text labels
-    ggtitle(plotname, paste0(
+  loadingPlot <- ggplot2::ggplot(LoadingPlotData, aes(x = PlotPC1, y = PlotPC2, label = Protein, colour = var)) +
+    ggplot2::facet_wrap(~ facet) +
+    ggplot2::geom_segment(aes(x = 0, y = 0, xend = PlotPC1, yend = PlotPC2), arrow = arrow(type = "closed", length = unit(0.05, "inches"))) +  # Lines from origin
+    ggrepel::geom_text_repel(aes(label = Gene), size = 4) +  # Optional: Add text labels
+    ggplot2::ggtitle(plotname, paste0(
       "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
       "PC2: ",round(VarianceExplained[2],2)*100, " %, ",
       "PC3: ",round(VarianceExplained[3],2)*100, " % ")
     ) +
-    ylab("") +
+    ggplot2::ylab("") +
     ## name x axis properly
-    xlab("") +
-    theme_light(base_size = 13) +
+    ggplot2::xlab("") +
+    ggplot2::theme_light(base_size = 13) +
     ## make facet title background white and text black
-    theme(strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black"))
+    ggplot2::theme(strip.background = element_rect(fill = "white"),
+                   strip.text = element_text(colour = "black"))
 
 
   ## Creating Output Object
@@ -3117,12 +3165,12 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   Output$ScorePlot2D <- scorePlot
   Output$Loadingplot <- loadingPlot
   Output$PCA <- PCA
-  Output$ScorePlot3D <- ScorePlot3D
   Output$ScorePlot_12 <- ScorePlot_12
+  Output$ScorePlot3D <- ScorePlot3D
+
 
   return(Output)
 }
-
 
 ## Umap for visualization
 ## add roxygen comments
@@ -3133,7 +3181,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the UMAP calculations and the UMAP plot
 #' @export
-UMAP <- function(dataset, plotname = "", show_ellipse = F) {
+UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "Set1") {
 
   ## error of missing values in Intensity column
   if (base::any(base::is.na(dataset$Intensity))) {
@@ -3213,9 +3261,14 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
   UMAPPlotData2D <- base::rbind(UMAPPlotData12, UMAPPlotData13, UMAPPlotData23) %>%
     base::merge(UmapDataClin, by = "Sample")
 
+  ## assign colors to the status variable
+  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
+
   ## Making Score plot
   UMAPPlot2D <- ggplot2::ggplot(UMAPPlotData2D, ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, colour = Status)) +
     ggplot2::geom_jitter() +
+    ## use colors
+    ggplot2::scale_color_manual(values = colors) +
     ggplot2::facet_wrap(~facet, axis.labels = "all") +
     ggplot2::ylab("") +
     ggplot2::xlab("") +
@@ -3232,6 +3285,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
   UMAPPlotData12 <- UMAPPlotData2D %>% dplyr::filter(facet == "UMAP1 (x) on UMAP2 (y)")
 
   UMAPPlot_12 <- ggplot(UMAPPlotData12, aes(x =PlotUMAP1 , y = PlotUMAP2, colour = Status)) +
+    ggplot2::scale_color_manual(values = colors) +
     geom_jitter() +
     ggtitle(plotname) +
     ylab("UMAP2") +
@@ -3253,7 +3307,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
     base::merge(UmapDataClin, by = "Sample")
 
   # 3D Plot using plotly
-  UMAPPlot3D <- plotly::plot_ly(UMAPPlotData, x = ~UMAP1, y = ~UMAP2, z = ~UMAP3, color = ~Status, type = "scatter3d", mode = "markers") %>%
+  UMAPPlot3D <- plotly::plot_ly(UMAPPlotData, x = ~UMAP1, y = ~UMAP2, z = ~UMAP3, color = ~Status, type = "scatter3d", mode = "markers",colors = colors[unique(dataset$Status)]) %>%
     plotly::layout(title = base::paste(plotname),
                    scene = list(xaxis = list(title = "UMAP1"),
                                 yaxis = list(title = "UMAP2"),
@@ -3279,7 +3333,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F) {
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the tSNE calculations and the tSNE plot
 #' @export
-tSNE <- function(dataset, plotname = "", show_ellipse = F) {
+tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "Set1") {
 
   ## Error if missing values in object
   if (any(is.na(dataset$Intensity))) {
@@ -3314,10 +3368,16 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
       dplyr::select(Sample, !dplyr::contains("_"))
   }
 
-  set.seed(2105)  # Use any fixed number
+  set.seed(2105)  # Use any fixed number for reproducability
 
-  ## Calculate t-SNE embedding
-  tSNEResult <- Rtsne::Rtsne(tSNEData, dims = 3)
+  # Get the number of samples
+  n_samples <- nrow(tSNEData)
+
+  # Set perplexity to a suitable value (e.g., less than n_samples / 3)
+  adjusted_perplexity <- min(30, floor(n_samples / 4))
+
+  # Run t-SNE with adjusted perplexity
+  tSNEResult <- Rtsne::Rtsne(tSNEData, dims = 3, perplexity = adjusted_perplexity)
 
   ## Make plot data
   tSNEPlotData <- data.frame(Sample = row.names(tSNEData),
@@ -3328,27 +3388,35 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
   ## Only Dim1 and Dim2
   tSNEPlotData12 <- tSNEPlotData %>%
     dplyr::select(-c("Dim3")) %>%
-    dplyr::mutate(facet = "Dim1 (x) on Dim2 (y)")
+    dplyr::mutate(facet = "Dim1 (x) on Dim2 (y)") %>%
+    dplyr::mutate(Sample = as.character(Sample))
   colnames(tSNEPlotData12)[2:3] <- c("PlotDim1", "PlotDim2")
 
   ## Only Dim1 and Dim3
   tSNEPlotData13 <- tSNEPlotData %>%
     dplyr::select(-c("Dim2")) %>%
-    dplyr::mutate(facet = "Dim1 (x) on Dim3 (y)")
+    dplyr::mutate(facet = "Dim1 (x) on Dim3 (y)") %>%
+    dplyr::mutate(Sample = as.character(Sample))
   colnames(tSNEPlotData13)[2:3] <- c("PlotDim1", "PlotDim2")
 
   ## Only Dim2 and Dim3
   tSNEPlotData23 <- tSNEPlotData %>%
     dplyr::select(-c("Dim1")) %>%
-    dplyr::mutate(facet = "Dim2 (x) on Dim3 (y)")
+    dplyr::mutate(facet = "Dim2 (x) on Dim3 (y)") %>%
+    dplyr::mutate(Sample = as.character(Sample))
   colnames(tSNEPlotData23)[2:3] <- c("PlotDim1", "PlotDim2")
 
   ## Recombine Dataframes in long format
   tSNEPlotData <- dplyr::bind_rows(tSNEPlotData12, tSNEPlotData13, tSNEPlotData23) %>%
-    dplyr::inner_join(ClinicalData, by = "Sample")
+    base::merge(ClinicalData, by = "Sample")
+
+  ## assign colors to the status variable
+  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
 
   ## Making 2D score plot
   tSNEPlot2D <- ggplot2::ggplot(tSNEPlotData, ggplot2::aes(x = PlotDim1, y = PlotDim2, colour = Status)) +
+    ## use colors
+    ggplot2::scale_color_manual(values = colors) +
     ggplot2::geom_jitter() +
     ggplot2::facet_wrap(~facet, labeller = "label_value") +
     ggplot2::ylab("") +
@@ -3366,6 +3434,7 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
   tSNEPlotData_12 <- tSNEPlotData %>% dplyr::filter(facet == "Dim1 (x) on Dim2 (y)")
 
   tSNEPlot_12 <- ggplot(tSNEPlotData_12, aes(x =PlotDim1 , y = PlotDim2, colour = Status)) +
+    ggplot2::scale_color_manual(values = colors) +
     geom_jitter() +
     ggtitle(plotname) +
     ylab("Dim2") +
@@ -3386,10 +3455,10 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F) {
                             Dim1 = tSNEResult$Y[, 1],
                             Dim2 = tSNEResult$Y[, 2],
                             Dim3 = tSNEResult$Y[, 3]) %>%
-    dplyr::inner_join(ClinicalData, by = "Sample")
+    base::merge(ClinicalData, by = "Sample")
 
   tSNEPlot3D <- PlotData3ED %>%
-    plotly::plot_ly(x = ~Dim1, y = ~Dim2, z = ~Dim3, color = ~Status, type = "scatter3d", mode = "markers") %>%
+    plotly::plot_ly(x = ~Dim1, y = ~Dim2, z = ~Dim3, color = ~Status, type = "scatter3d", mode = "markers",colors = colors[unique(dataset$Status)]) %>%
     plotly::layout(scene = list(xaxis = list(title = "Dim1"),
                                 yaxis = list(title = "Dim2"),
                                 zaxis = list(title = "Dim3")),
@@ -4217,21 +4286,21 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   AUC <- base::round(pROC::auc(roc_curve), 2)
 
 
-  # Customizing aesthetics within ggroc
-  roc_plot <- pROC::ggroc(roc_curve, size = 1.2, color = "black") + # Set line size and color
-    theme_minimal() +                         # Use a minimal theme
-    labs(
-      title = "ROC Curve",                    # Add a title
-      x = "1 - Specificity",
-      y = "Sensitivity"
-    ) +
-    ggplot2::geom_abline(intercept = 1, slope = 1, linetype = "dashed", colour = "red", linewidth = 1.5) + # Add a diagonal line
-    ggplot2::ggtitle(plotname, paste("AUC:", AUC))
-  ## add shaded confidence interval if cross validation == TRUE
+  roc_coords <- coords(roc_curve, x = "all", ret = c("1-specificity", "sensitivity"))
+  roc_data <- data.frame(FPR = roc_coords$`1-specificity`, TPR = roc_coords$sensitivity)
 
+  # Customizing aesthetics within ggroc
+  # Create a manual ggplot
+  roc_plot <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
+    geom_path(color = "black", size = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") + # Diagonal line
+    labs(x = "False Positive Rate", y = "True Positive Rate", title = paste("AUC:", round(auc(roc_curve), 2))) +
+    theme_minimal()
+
+  ## add shaded confidence interval if cross validation == TRUE
   if(crossvalidation == T){
     roc_plot <- roc_plot +
-      ggplot2::geom_ribbon(data = ci_band, aes(x = specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1)+
+      ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1, inherit.aes = F)+
       ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
   }
 

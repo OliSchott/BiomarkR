@@ -4,7 +4,7 @@
 \alias{UMAP}
 \title{UMAP}
 \usage{
-UMAP(dataset, plotname = "", show_ellipse = F)
+UMAP(dataset, plotname = "", show_ellipse = F, ColPalette = "Set1")
 }
 \arguments{
 \item{dataset}{The dataset to be plotted}

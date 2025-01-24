@@ -4,7 +4,7 @@
 \alias{tSNE}
 \title{tSNE}
 \usage{
-tSNE(dataset, plotname = "", show_ellipse = F)
+tSNE(dataset, plotname = "", show_ellipse = F, ColPalette = "Set1")
 }
 \arguments{
 \item{dataset}{The dataset to be plotted}
