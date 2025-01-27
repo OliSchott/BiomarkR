@@ -1774,13 +1774,13 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   if("Protein" %in% colnames(dataset)){
 
-    Heatmap <- HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Protein,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
 
   }
 
   if("Peptide" %in% colnames(dataset)){
 
-    Heatmap <- HeatMap(datasetW, PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Peptide,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
 
 
   }
