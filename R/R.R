@@ -3744,12 +3744,8 @@ BiomarkerPanel <- function(dataset, PoIs, n){
         ## get the current combination
         current_combination <- current_permutation[[j]]
 
-        ## get the data for the current combination
-        current_data <- dataset %>% dplyr::filter(Protein %in% current_combination)
-
         ## model
-        model <- GLM(current_data, PoIs = current_combination)  # Assuming GLM is user-defined or part of another package
-
+        model <- BiomarkR::GLM(dataset, PoIs = current_combination)
         AUC <- model$AUC
 
         ## Put the AUC and combination in a data frame
@@ -3776,11 +3772,8 @@ BiomarkerPanel <- function(dataset, PoIs, n){
         ## get the current combination
         current_combination <- current_permutation[[j]]
 
-        ## get the data for the current combination
-        current_data <- dataset %>% dplyr::filter(Peptide %in% current_combination)
-
         ## model
-        model <- GLM(current_data, PoIs = current_combination)  # Assuming GLM is user-defined or part of another package
+        model <- BiomarkR::GLM(dataset, PoIs = current_combination)
 
         AUC <- model$AUC
 
