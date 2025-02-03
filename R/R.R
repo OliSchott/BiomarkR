@@ -2322,14 +2322,23 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     # Extract AUC value
     AUC <- ROC$auc
 
+    ## count number of observation in Stauts[1]
+    n1 <- sum(ROCData$Status == Status1)
+    ## count number of observation in Stauts[2]
+    n2 <- sum(ROCData$Status == Status2)
+
     # Populate AUCResults data frame
     AUCResults[i, 1] <- PoI
     AUCResults[i, 2] <- AUC
+    AUCResults[i, 3] <- n1
+    AUCResults[i, 4] <- n2
 
     # Arrange AUCResults by decreasing AUC values
     AUCResults <- dplyr::arrange(AUCResults, desc(AUC))
 
   }
+
+  colnames(AUCResults) <- c("PoI", "AUC", Status1, Status2)
 
   # Create AUC plot using ggplot2
   AUCPlot <- ggplot2::ggplot(data = AUCResults) +
@@ -2399,11 +2408,20 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     ## remove legend
     ggplot2::theme(legend.position = "none")
 
+  ## create Histogram plot of AUCs
+  Histogram <- ggplot2::ggplot(AUCResults, ggplot2::aes(x = AUC)) +
+    ggplot2::geom_histogram(fill = "blue", alpha = 0.5, binwidth = 0.01) +
+    ggplot2::theme_minimal() +
+    ggplot2::ggtitle(paste("Histogram of AUCs for", plotname)) +
+    ggplot2::xlab("AUC") +
+    ggplot2::ylab("Count")
+
   # Create output list containing results and plot
   Output <- list()
   Output$results <- AUCResults
   Output$plot <- AUCPlot
   Output$VulcanoPlot <- VulcanoPlot
+  Output$Histogram <- Histogram
   return(Output)
 }
 
@@ -3019,14 +3037,18 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
   ## get variance explained
   VarianceExplained <- PCA@R2
 
-  ## assign colors to the status variable
-  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
+  ## assign color
+  if(! is.numeric(PCAPlotData$Status)){
+    colors <- BiomarkR::assign_colors(unique(PCAPlotData$Status), palette = ColPalette)
+    }
+
+
+
 
   ## making Score plot
   scorePlot <- ggplot(PCAPlotData, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
-    ## use colors for Status
-    scale_color_manual(values = colors) +
     geom_jitter() +
+    ## use colors
     facet_wrap(~ PCAPlotData$facet, axis.labels = "all") +
     ggtitle(plotname, paste0(
       "PC1: ",round(VarianceExplained[1],2)*100, " %, ",
@@ -3041,11 +3063,17 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
     theme(strip.background = element_rect(fill = "white"),
           strip.text = element_text(colour = "black")) +
     if(show_ellipse == T){
-      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+      ggplot2::stat_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 1)
     }
 
+  ## change the colors if Status is numeric
+  if(is.numeric(PCAPlotData$Status)){
+    scorePlot <- scorePlot + scale_color_viridis_c()
+  } else {
+    scorePlot <- scorePlot + scale_color_manual(values = colors)
+  }
+
   ScorePlot_12 <- ggplot(PCAPlotData12, aes(x = PlotPC1, y = PlotPC2, colour = Status)) +
-    scale_color_manual(values = colors) +
     geom_jitter() +
     ggtitle(plotname) +
     ylab(paste0("PC2 (", round(VarianceExplained[2],2)*100, " %)")) +
@@ -3059,34 +3087,55 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
     }
 
+  ## change the colors if Status is numeric
+  if(is.numeric(PCAPlotData$Status)){
+    ScorePlot_12 <- ScorePlot_12 + scale_color_viridis_c()
+  } else {
+    ScorePlot_12 <- ScorePlot_12 + scale_color_manual(values = colors)
+  }
+
 
   ## Making 3D score plot
   ## extracting scores for the first three principal components
   # Create the 3D Score Plot
-  ScorePlot3D <- PCA@scores %>%
+  ScorePlot3DData <- PCA@scores %>%
     ## Combine with sample information
-    cbind(PCAData) %>%
-    ## Make 3D score plot using plotly
+    cbind(PCAData)
+
+  ## Make 3D score plot using plotly
+  # Check if Status is a factor
+  ScorePlot3D <- if (!is.numeric(ScorePlot3DData$Status)) {
+    # Use categorical color mapping
     plotly::plot_ly(
+      data = ScorePlot3DData,
       x = ~PC1,
       y = ~PC2,
       z = ~PC3,
-      color = ~Status,                     # Use Status for grouping
-      colors = colors[unique(dataset$Status)],     # Map Status levels to the pre-generated colors
+      color = ~Status,  # Categorical color mapping
+      colors = assign_colors(unique(ScorePlot3DData$Status)), # Define colors for levels
+      type = "scatter3d",
+      mode = "markers",
+      marker = list(size = 5)
+    )
+  } else {
+    # Use continuous color mapping
+    plotly::plot_ly(
+      data = ScorePlot3DData,
+      x = ~PC1,
+      y = ~PC2,
+      z = ~PC3,
+      marker = list(
+        size = 5,
+        color = ~Status,   # Continuous color scale
+        colorscale = "Viridis", # Apply Viridis color scale
+        showscale = TRUE       # Show the color legend
+      ),
       type = "scatter3d",
       mode = "markers"
-    ) %>%
-    ## Add axis titles
-    plotly::layout(
-      scene = list(
-        xaxis = list(title = "PC1"),
-        yaxis = list(title = "PC2"),
-        zaxis = list(title = "PC3")
-      )
-    ) %>%
+    )
+  }
     ## Add a plot title
-    plotly::layout(title = paste("3D Score plot", plotname))
-
+  ScorePlot3D <- ScorePlot3D %>% plotly::layout(title = paste("3D Score plot", plotname))
 
 
   ## loading plot
@@ -3483,7 +3532,7 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "Set1") 
 #' @param dataset The dataset to be tested
 #' @return A list object containing the results of the effect analysis
 #' @export
-EffectAnalysis <- function(dataset){
+EffectAnalysis <- function(dataset, plotname = ""){
 
   PCA <- PCA(dataset)
 
@@ -3551,7 +3600,7 @@ EffectAnalysis <- function(dataset){
     ## rename axis
     ggplot2::xlab("PCs") +
     ggplot2::ylab("Variables") +
-    ggplot2::ggtitle("Correlation between principal components and metadata", "\n *p.adj < 0.05 | **p.adj < 0.01") +
+    ggplot2::ggtitle(paste("Correlation between principal components and metadata", "\n *p.adj < 0.05 | **p.adj < 0.01", plotname)) +
     ggplot2::theme_minimal()
 
   ## Calculate correlations between clinical variables
@@ -3571,7 +3620,7 @@ EffectAnalysis <- function(dataset){
     as.matrix()
 
   ## plot CorrMatrix using complexheatmapl
-  CorrMatrixPlot <- ComplexHeatmap::Heatmap(CorrMatrix, name = "correlation", column_title = "Correlation between clinical variables")
+  CorrMatrixPlot <- ComplexHeatmap::Heatmap(CorrMatrix, name = "correlation", column_title = paste("Correlation between clinical variables", plotname))
 
 
   output <- list(CorResults, EffectPlot = EffectPlot, PCA = PCA, EffectCorrelationsPlot = CorrMatrixPlot, CorrResultsClin = CorrResultsClin)
@@ -3745,11 +3794,12 @@ BiomarkerPanel <- function(dataset, PoIs, n){
         current_combination <- current_permutation[[j]]
 
         ## model
-        model <- BiomarkR::GLM(dataset, PoIs = current_combination)
+        model <- BiomarkR::GLM(dataset, PoIs = current_combination, crossvalidation = T)
         AUC <- model$AUC
 
         ## Put the AUC and combination in a data frame
-        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC))
+        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC)) %>%
+          arrange(-AUC)
 
       }
 
@@ -3795,7 +3845,7 @@ BiomarkerPanel <- function(dataset, PoIs, n){
   BestCombination <- strsplit(BestCombination, ", ")[[1]]
 
   ## sort Combination AUCs
-  Combination_AUCs <- Combination_AUCs %>% dplyr::arrange(dplyr::desc(AUC))
+  Combination_AUCs <- Combination_AUCs %>% dplyr::arrange(-AUC)
 
   return(list(BestCombination = BestCombination, Combination_AUCs = Combination_AUCs))
 }
@@ -4250,7 +4300,7 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
     suppressMessages(suppressWarnings(
       roc_curve <- pROC::roc(response = crossval_preds$obs,
                              predictor = predictor, # Predicted probabilities for positive class
-                             ci = TRUE, boot.n = 2000, conf.level = 0.95)
+                             ci = TRUE, boot.n = 100, conf.level = 0.95)
     ))
 
     # Calculate confidence intervals for specificities
