@@ -4,7 +4,7 @@
 \alias{EffectAnalysis}
 \title{EffectAnalysis}
 \usage{
-EffectAnalysis(dataset)
+EffectAnalysis(dataset, plotname = "")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}

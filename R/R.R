@@ -30,6 +30,7 @@
 #' @import igraph
 #' @import Rtsne
 #' @import grid
+#' @import MEGENA
 
 ## Data Import and Management
 ## add roxygen comments
@@ -4988,6 +4989,94 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 
 ## High order functions
 
+## qdd roxygen comments
+#' @title SplineRegression
+#' @description Spline regression for the specified dataset.
+#' @param dataset The dataset to be tested
+#' @param PoIs A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
+#' @param Timecol The column containing the time points. Example "GestationalAge"
+#' @param alpha The confidence level for the confidence intervals
+#' @param split_status A boolean indicating if the model should be split by status
+#' @param plotname The name to be displayed on created plots
+#' @return A list object containing the results of the spline regression, the confidence intervals and the plot
+#' @export
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "") {
+  GlobalData <- dataset
+
+  # Ensure Timecol is treated as a column name
+  Timecol <- rlang::ensym(Timecol)
+
+  # Step 1: Fit a global spline model across all proteins
+  global_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(dataset[[Timecol]])),
+                                                     knots = length(unique(dataset[[Timecol]])) - 1),
+                             data = GlobalData)
+
+  # Step 2: Predict confidence intervals for the global model
+  global_preds <- stats::predict(global_spline, newdata = GlobalData, interval = "confidence", level = (1 - alpha))
+  GlobalData <- dplyr::mutate(GlobalData, global_fit = global_preds[, 1], global_lower = global_preds[, 2], global_upper = global_preds[, 3])
+
+  # Calculate splines for every PoI
+  SplineResults <- data.frame()
+
+  for (i in seq_along(PoIs)) {
+    PoI <- PoIs[[i]]
+    subset_data <- dplyr::filter(dataset, Protein == PoI)
+
+    if (split_status) {
+      protein_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(subset_data[[Timecol]])),
+                                                          knots = length(unique(subset_data[[Timecol]])) - 1) * Status,
+                                  data = subset_data)
+    } else {
+      protein_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(subset_data[[Timecol]])),
+                                                          knots = length(unique(subset_data[[Timecol]])) - 1),
+                                  data = subset_data)
+    }
+
+    # Predict confidence intervals for the protein model
+    protein_preds <- stats::predict(protein_spline, newdata = subset_data, interval = "confidence", level = (1 - alpha))
+
+    subset_data <- dplyr::mutate(subset_data, fit = protein_preds[, 1], lower = protein_preds[, 2], upper = protein_preds[, 3])
+
+    SplineResults <- dplyr::bind_rows(SplineResults, subset_data)
+  }
+
+  # Make plottable Data
+  if (split_status) {
+    PlotData <- SplineResults %>%
+      dplyr::group_by(!!Timecol, Status) %>%
+      dplyr::summarise(meanFit = mean(fit), .groups = "drop")
+  } else {
+    PlotData <- SplineResults %>%
+      dplyr::group_by(!!Timecol) %>%
+      dplyr::summarise(meanFit = mean(fit), .groups = "drop")
+  }
+
+  # Generate output plot
+  colors <- assign_colors(unique(dataset$Status))
+
+  Plot <- ggplot2::ggplot(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit)) +
+    ggplot2::geom_line(linewidth = 1) +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(title = plotname, x = rlang::as_label(Timecol), y = "Fit") +
+    ggplot2::geom_line(ggplot2::aes(y = global_fit), color = "black", linetype = "dashed", data = GlobalData) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = global_lower, ymax = global_upper, y = global_fit), fill = "grey", alpha = 0.5, data = GlobalData, color = NA)
+
+  if (split_status) {
+    Plot <- Plot + ggplot2::aes(color = Status, group = Status) +
+      ## use colors
+      ggplot2::scale_color_manual(values = colors)
+  }
+
+  # Create output list
+  Output <- list(
+    GlobalPreds = GlobalData,
+    PoIPreds = SplineResults,
+    Plot = Plot
+  )
+
+  return(Output)
+}
+
 
 ## add roxygen comments
 #' @title HeatMapProteinClusterAnalysis
@@ -5174,97 +5263,80 @@ MultiWayComaprison <- function(dataset, plotname = ""){
 MEGENA <- function(dataset){
 
   TestData <- dataset %>%
-    select(Sample, Protein, Intensity) %>%
-    pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    pivot_longer(cols = -Sample, names_to = "Protein", values_to = "Intensity") %>%
+    dplyr::select(Sample, Protein, Intensity) %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    tidyr::pivot_longer(cols = -Sample, names_to = "Protein", values_to = "Intensity") %>%
     ImputeFeatureIntensity() %>%
-    pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    column_to_rownames(var = "Sample") %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    tibble::column_to_rownames(var = "Sample") %>%
     as.matrix() %>% t()
 
   # Calculate the correlation matrix
-  cor_matrix <- calculate.correlation(TestData)
+  cor_matrix <- MEGENA::calculate.correlation(TestData)
 
   # Construct the PFN
-  pfn <- calculate.PFN(cor_matrix)
+  pfn <- MEGENA::calculate.PFN(cor_matrix)
 
   ## Construct the graph
-  g <- graph_from_data_frame(pfn,directed = FALSE)
+  g <- igraph::graph_from_data_frame(pfn, directed = FALSE)
 
-  ## Calcualte the modules
-  MEGENA.output <- do.MEGENA(g)
+  ## Calculate the modules
+  MEGENA.output <- MEGENA::do.MEGENA(g)
 
   ## Summarize the modules
-  summary.output <- MEGENA.ModuleSummary(MEGENA.output,
-                                         min.size = 50,max.size = vcount(g)/2,
-                                         output.sig = TRUE)
-
+  summary.output <- MEGENA::MEGENA.ModuleSummary(MEGENA.output,
+                                                 min.size = 50, max.size = igraph::vcount(g)/2,
+                                                 output.sig = TRUE)
 
   ## Extract module table
   module.table <- summary.output$module.table
   colnames(module.table)[1] <- "id" # first column of module table must be labelled as "id".
 
-  ## Calculate hirarchy plot
-  hierarchy.obj <- plot_module_hierarchy(module.table = module.table,label.scaleFactor = 0.15,
-                                         arrow.size = 0.03,node.label.color = "blue")
-  # Hyrarchy plot
+  ## Calculate hierarchy plot
+  hierarchy.obj <- MEGENA::plot_module_hierarchy(module.table = module.table, label.scaleFactor = 0.15,
+                                                 arrow.size = 0.03, node.label.color = "blue")
+  # Hierarchy plot
   HirarchyPlot <- hierarchy.obj[[1]]
 
-  ## String Analysis of Proteins in Modules
-  ## Create Output object
-  output <- list()
-
-  for (i in 1: length(summary.output$modules)){
-    ## get module name
-    ModuleName <- names(summary.output$modules)[i]
-    ## Extract Proteins in Modules
-    ProteinsInModules <- summary.output$modules[[i]]
-    ## Add to Output in ith position
-    output$STRINGResults[[ModuleName]] <- STRING(ProteinsInModules, STRINGBackground = unique(dataset$Protein))
-
-  }
-
-  ## Correlate modules with Stauts
+  ## Correlate modules with Status
 
   ## Proteins in Modules
   ProteinsInModules <- data.frame()
-  ## extract modusles
-  for (i in 1 : length(summary.output$modules)){
+  ## extract modules
+  for (i in 1:length(summary.output$modules)){
     Proteins <- summary.output$modules[[i]]
-
     modules <- names(summary.output$modules)[i]
-
     ProteinsInModules <- rbind(ProteinsInModules, data.frame(Protein = Proteins, Module = modules))
-
   }
 
-  CorrelationData <- merge(dataset, ProteinsInModules, by = "Protein")
+  CorrelationData <- base::merge(dataset, ProteinsInModules, by = "Protein")
 
   ## Set up dummy variable in CorrelationData for any length of Status
   Status <- unique(CorrelationData$Status)
 
-  for (i in 1 : length(Status)){
-    CorrelationData <- CorrelationData %>% mutate(DStatus = ifelse(Status == Status[i], i, 0))
+  for (i in 1:length(Status)){
+    CorrelationData <- dplyr::mutate(CorrelationData, DStatus = ifelse(Status == Status[i], i, 0))
   }
 
-  ## Calculate Correlations and p_values
+  ## Calculate Correlations and p-values
   CorrelationResults <- CorrelationData %>%
-    group_by(Module) %>%
-    summarize(correlation = cor.test(Intensity, DStatus)$estimate,
-              p.value = cor.test(Intensity, DStatus)$p.value) %>%
-    adjust_pvalue(method = "fdr") %>%
-    arrange(correlation)
+    dplyr::group_by(Module) %>%
+    dplyr::summarize(correlation = stats::cor.test(Intensity, DStatus)$estimate,
+                     p.value = stats::cor.test(Intensity, DStatus)$p.value) %>%
+    dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
+    dplyr::arrange(correlation)
 
   ## Plot Correlation Results
-  CorrelationPlot <- ggplot(CorrelationResults, aes(x = correlation, y = -log(p.value.adj))) +
-    geom_point() +
-    geom_abline(intercept = -log10(0.05), slope = 0, color = "grey", linetype = 2) +
-    geom_abline(intercept = -log10(0.01), slope = 0, color = "red", linetype = 2) +
-    ggrepel::geom_text_repel(aes(label = Module), box.padding = 0.5) +
-    theme_minimal() +
-    labs(x = "Correlation", y = "-log10(p-value)") +
-    ggtitle("Correlation of Modules with Status")
+  CorrelationPlot <- ggplot2::ggplot(CorrelationResults, ggplot2::aes(x = correlation, y = -log10(p.value.adj))) +
+    ggplot2::geom_point() +
+    ggplot2::geom_abline(intercept = -log10(0.05), slope = 0, color = "grey", linetype = 2) +
+    ggplot2::geom_abline(intercept = -log10(0.01), slope = 0, color = "red", linetype = 2) +
+    ggrepel::geom_text_repel(ggplot2::aes(label = Module), box.padding = 0.5) +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(x = "Correlation", y = "-log10(p.adj)") +
+    ggplot2::ggtitle("Correlation of Modules with Status")
 
+  output <- list()
   ## populate output object
   output$MEGENA <- MEGENA.output
   output$Summary <- summary.output
@@ -5273,9 +5345,9 @@ MEGENA <- function(dataset){
   output$CorrelationResults <- CorrelationResults
   output$CorrelationPlot <- CorrelationPlot
 
-
   return(output)
 }
+
 
 ## ToDo
 ## Data Manipulation
