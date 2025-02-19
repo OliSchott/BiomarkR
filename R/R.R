@@ -5311,30 +5311,44 @@ MEGENA <- function(dataset){
 
   CorrelationData <- base::merge(dataset, ProteinsInModules, by = "Protein")
 
-  ## Set up dummy variable in CorrelationData for any length of Status
-  Status <- unique(CorrelationData$Status)
 
-  for (i in 1:length(Status)){
-    CorrelationData <- dplyr::mutate(CorrelationData, DStatus = ifelse(Status == Status[i], i, 0))
+  ## calculate correlation between the modules and meta variables
+  vars <- colnames(dataset %>% dplyr::select(-c(Protein, Intensity, Sample)))
+
+  CorrelationResultsList <- list()
+
+  for(i in 1:length(vars)){
+    ## define var
+    var <- vars[i]
+
+    ## make var a factor
+    CorrelationData[[var]] <- as.numeric(as.factor(CorrelationData[[var]]))
+
+    ## Calculate Correlations and p-values
+    CorrelationResults <- CorrelationData %>%
+      dplyr::group_by(Module) %>%
+      dplyr::summarize(correlation = stats::cor.test(x = Intensity,y = .data[[var]], method = "spearman")$estimate,
+                                               p.value = stats::cor.test(Intensity, .data[[var]])$p.value) %>%
+      dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
+      dplyr::arrange(correlation)
+
+    ## Plot Correlation Results
+    CorrelationPlot <- ggplot2::ggplot(CorrelationResults, ggplot2::aes(x = correlation, y = -log10(p.value.adj))) +
+      ggplot2::geom_point() +
+      ggplot2::geom_abline(intercept = -log10(0.05), slope = 0, color = "grey", linetype = 2) +
+      ggplot2::geom_abline(intercept = -log10(0.01), slope = 0, color = "red", linetype = 2) +
+      ggrepel::geom_text_repel(ggplot2::aes(label = Module), box.padding = 0.5) +
+      ggplot2::theme_minimal() +
+      ggplot2::labs(x = "Correlation", y = "-log10(p.adj)") +
+      ggplot2::ggtitle(paste("Correlation between", var, "and Modules"))
+
+    ## put results into list
+    CorrelationResultsList$Data[[var]] <- CorrelationResults
+    CorrelationResultsList$Plot[[var]] <- CorrelationPlot
+
   }
 
-  ## Calculate Correlations and p-values
-  CorrelationResults <- CorrelationData %>%
-    dplyr::group_by(Module) %>%
-    dplyr::summarize(correlation = stats::cor.test(Intensity, DStatus, method = "spearman")$estimate,
-                     p.value = stats::cor.test(Intensity, DStatus)$p.value) %>%
-    dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
-    dplyr::arrange(correlation)
 
-  ## Plot Correlation Results
-  CorrelationPlot <- ggplot2::ggplot(CorrelationResults, ggplot2::aes(x = correlation, y = -log10(p.value.adj))) +
-    ggplot2::geom_point() +
-    ggplot2::geom_abline(intercept = -log10(0.05), slope = 0, color = "grey", linetype = 2) +
-    ggplot2::geom_abline(intercept = -log10(0.01), slope = 0, color = "red", linetype = 2) +
-    ggrepel::geom_text_repel(ggplot2::aes(label = Module), box.padding = 0.5) +
-    ggplot2::theme_minimal() +
-    ggplot2::labs(x = "Correlation", y = "-log10(p.adj)") +
-    ggplot2::ggtitle("Correlation of Modules with Status")
 
   output <- list()
   ## populate output object
