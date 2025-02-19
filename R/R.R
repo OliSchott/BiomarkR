@@ -5322,7 +5322,7 @@ MEGENA <- function(dataset){
     var <- vars[i]
 
     ## make var a factor
-    CorrelationData[[var]] <- as.numeric(as.factor(CorrelationData[[var]]))
+    CorrelationData[[var]] <- base::as.numeric(base::as.factor(CorrelationData[[var]]))
 
     ## Calculate Correlations and p-values
     CorrelationResults <- CorrelationData %>%
