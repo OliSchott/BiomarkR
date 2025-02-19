@@ -5356,8 +5356,7 @@ MEGENA <- function(dataset){
   output$Summary <- summary.output
   output$ModuleTable <- module.table
   output$HirarchyPlot <- HirarchyPlot
-  output$CorrelationResults <- CorrelationResults
-  output$CorrelationPlot <- CorrelationPlot
+  output$CorrelationResults <- CorrelationResultsList
 
   return(output)
 }
