@@ -5321,7 +5321,7 @@ MEGENA <- function(dataset){
   ## Calculate Correlations and p-values
   CorrelationResults <- CorrelationData %>%
     dplyr::group_by(Module) %>%
-    dplyr::summarize(correlation = stats::cor.test(Intensity, DStatus)$estimate,
+    dplyr::summarize(correlation = stats::cor.test(Intensity, DStatus, method = "spearman")$estimate,
                      p.value = stats::cor.test(Intensity, DStatus)$p.value) %>%
     dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
     dplyr::arrange(correlation)
