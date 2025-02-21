@@ -5000,7 +5000,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
-SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "") {
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100) {
   GlobalData <- dataset
 
   # Ensure Timecol is treated as a column name
@@ -5040,32 +5040,128 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
     SplineResults <- dplyr::bind_rows(SplineResults, subset_data)
   }
 
-  # Make plottable Data
+  # Make plotable Data
+  # Prepare data for plotting
   if (split_status) {
-    PlotData <- SplineResults %>%
+    # Perform bootstrap resampling B times to estimate confidence intervals for the mean fit per Timecol and Status
+    PlotData <- replicate(B, {
+
+      # Step 1: Create a bootstrapped sample by randomly sampling rows from SplineResults with replacement
+      boot_sample <- dplyr::slice_sample(SplineResults, n = nrow(SplineResults), replace = TRUE)
+
+      # Step 2: For each bootstrap sample, compute the mean fit per Timecol and Status
+      boot_sample %>%
+        dplyr::group_by(!!Timecol, Status) %>%
+        dplyr::summarise(meanFit = mean(fit), .groups = "drop")  # Calculate the mean fit for each group
+
+    }, simplify = FALSE) %>%  # Return the results as a list of data frames
+
+      # Step 3: Combine all bootstrap results into a single data frame
+      dplyr::bind_rows() %>%
+
+      # Step 4: Group by Timecol and Status to compute the confidence intervals
       dplyr::group_by(!!Timecol, Status) %>%
-      dplyr::summarise(meanFit = mean(fit), .groups = "drop")
+      dplyr::summarise(
+
+        # Compute lower bound of confidence interval (alpha/2 quantile, e.g., 2.5% for 95% CI)
+        lower = stats::quantile(meanFit, probs = alpha / 2),
+
+        # Compute upper bound of confidence interval (1 - alpha/2 quantile, e.g., 97.5% for 95% CI)
+        upper = stats::quantile(meanFit, probs = 1 - alpha / 2),
+
+        # Compute the mean of the bootstrapped meanFit values (expected mean trend)
+        meanFit = mean(meanFit),
+
+        .groups = "drop"  # Prevent unwanted grouping in subsequent operations
+      )
+
+
   } else {
-    PlotData <- SplineResults %>%
+    # Perform bootstrap resampling B times to estimate confidence intervals for the mean fit per Timecol and Status
+    PlotData <- replicate(B, {
+
+      # Step 1: Create a bootstrapped sample by randomly sampling rows from SplineResults with replacement
+      boot_sample <- dplyr::slice_sample(SplineResults, n = nrow(SplineResults), replace = TRUE)
+
+      # Step 2: For each bootstrap sample, compute the mean fit per Timecol
+      boot_sample %>%
+        dplyr::group_by(!!Timecol) %>%
+        dplyr::summarise(meanFit = mean(fit), .groups = "drop")  # Calculate the mean fit for each group
+
+    }, simplify = FALSE) %>%  # Return the results as a list of data frames
+
+      # Step 3: Combine all bootstrap results into a single data frame
+      dplyr::bind_rows() %>%
+
+      # Step 4: Group by Timecol to compute the confidence intervals
       dplyr::group_by(!!Timecol) %>%
-      dplyr::summarise(meanFit = mean(fit), .groups = "drop")
+      dplyr::summarise(
+
+        # Compute lower bound of confidence interval (alpha/2 quantile, e.g., 2.5% for 95% CI)
+        lower = stats::quantile(meanFit, probs = alpha / 2),
+
+        # Compute upper bound of confidence interval (1 - alpha/2 quantile, e.g., 97.5% for 95% CI)
+        upper = stats::quantile(meanFit, probs = 1 - alpha / 2),
+
+        # Compute the mean of the bootstrapped meanFit values (expected mean trend)
+        meanFit = mean(meanFit),
+
+        .groups = "drop"  # Prevent unwanted grouping in subsequent operations
+      )
+
   }
+
+  ## make global plot data
+  GlobalPlotData <- GlobalData %>%
+    dplyr::group_by(!!Timecol) %>%
+    dplyr::summarise(lower = stats::quantile(global_lower, probs = alpha / 2),
+                     upper = stats::quantile(global_upper, probs = 1 - alpha / 2),
+                     meanFit = mean(global_fit), .groups = "drop")
+
+  ## make one bit dataframe from plotdata and glabalplotdata
+  PlotDataAll <- dplyr::bind_rows(PlotData, GlobalPlotData)
 
   # Generate output plot
   colors <- assign_colors(unique(dataset$Status))
 
-  Plot <- ggplot2::ggplot(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit)) +
-    ggplot2::geom_line(linewidth = 1) +
-    ggplot2::theme_minimal() +
-    ggplot2::labs(title = plotname, x = rlang::as_label(Timecol), y = "Fit") +
-    ggplot2::geom_line(ggplot2::aes(y = global_fit), color = "black", linetype = "dashed", data = GlobalData) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = global_lower, ymax = global_upper, y = global_fit), fill = "grey", alpha = 0.5, data = GlobalData, color = NA)
+  Plot <- ggplot2::ggplot() +
+    ## plot global spline
+    ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), color = "black") +
+    ## plot CI of global spline
+    ggplot2::geom_ribbon(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5)
 
-  if (split_status) {
-    Plot <- Plot + ggplot2::aes(color = Status, group = Status) +
-      ## use colors
-      ggplot2::scale_color_manual(values = colors)
+  if (split_status == T){
+
+    ## plot Protein splines for each status
+    Plot <- Plot +
+    ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status)) +
+    ## plot CI of Protein splines for each status
+    ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.5)
+
   }
+
+  if (split_status == F){
+
+    ## plot Protein splines for each status
+    Plot <- Plot +
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit)) +
+      ## plit CI of Protein splines for each status
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), alpha = 0.5)
+
+    ## make the CI ribbons the colors specified in colors
+    Plot <- Plot + ggplot2::scale_fill_manual(values = colors)
+
+  }
+
+  Plot <- Plot +
+    ggplot2::ggtitle(paste(plotname)) +
+    ggplot2::theme_minimal() +
+    ## make the x axis the character entries in Timecol
+    ggplot2::scale_x_continuous(breaks = as.numeric(unique(dataset[[Timecol]])), labels = unique(dataset[[Timecol]])) +
+    ## rotate x-axis labels by 45 degrees
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+    ## make x axis label Timecol
+    ggplot2::xlab(rlang::as_label(Timecol))
 
   # Create output list
   Output <- list(
