@@ -4998,6 +4998,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 #' @param alpha The confidence level for the confidence intervals
 #' @param split_status A boolean indicating if the model should be split by status
 #' @param plotname The name to be displayed on created plots
+#' @param B The number of bootstrap samples to use for estimating confidence intervals
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
 SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100) {
