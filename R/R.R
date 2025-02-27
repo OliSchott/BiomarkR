@@ -252,7 +252,7 @@ GenerateSampleIDsFromFilePath <- function(filepath){
 #' @param feature The feature to be imported (Protein or Peptide)
 #' @return A dataset with the imported data
 #' @export
-ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protein") {
+ImportMSData <- function(filepath, SampleID = FALSE, feature = "Protein", programm = "DIA-NN") {
   ## Filepath is the directory where the Output is stored
   filepath <- base::file.path(filepath)
 
@@ -270,7 +270,7 @@ ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protei
         ## Cleaning data
         dataset <- dataset %>%
           dplyr::group_by(Protein.Group) %>%
-          dplyr::mutate(Genes = ifelse(base::is.na(Genes), stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]"), Genes)) %>%
+          dplyr::mutate(Genes = ifelse(base::is.na(Genes), paste0("XYX", stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]")), Genes)) %>%
           dplyr::ungroup() %>%
           dplyr::mutate(Protein = base::paste0(Protein.Group, "_", Genes)) %>%
           dplyr::select(c("Protein", base::colnames(dataset)[6:base::ncol(dataset)]))
@@ -296,7 +296,7 @@ ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protei
         ## Cleaning data
         dataset <- dataset %>%
           dplyr::group_by(Protein.Group) %>%
-          dplyr::mutate(Genes = ifelse(base::is.na(Genes), stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]"), Genes)) %>%
+          dplyr::mutate(Genes = ifelse(base::is.na(Genes), paste0("XYX", stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]")), Genes)) %>%
           dplyr::ungroup() %>%
           dplyr::mutate(Protein = base::paste0(Protein.Group, "_", Genes)) %>%
           dplyr::select(c("Protein", base::colnames(dataset)[6:base::ncol(dataset)]))
@@ -342,7 +342,7 @@ ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protei
         dataset <- dataset %>%
           dplyr::group_by(Modified.Sequence) %>%
           ## if there is no gene make one up
-          dplyr::mutate(Genes = ifelse(base::is.na(Genes), stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]"), Genes)) %>%
+          dplyr::mutate(Genes = ifelse(base::is.na(Genes), paste0("XYX", stringi::stri_rand_strings(1, length = 3, pattern = "[A-Z]")), Genes)) %>%
           dplyr::ungroup() %>%
           dplyr::mutate(Peptide = base::paste0(Protein.Group,"_", Modified.Sequence, "_", Genes)) %>%
           dplyr::select(-c("Protein.Names", "First.Protein.Description", "Proteotypic", "Stripped.Sequence", "Precursor.Id", "Protein.Group", "Protein.Ids")) %>%
@@ -379,6 +379,7 @@ ImportMSData <- function(filepath, programm, SampleID = FALSE, feature = "Protei
   return(base::invisible(dataset))
 
 }
+
 
 ## only DIA-NN Data can be imported ATM
 
@@ -1893,10 +1894,8 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
     ## calculate frequency of observations per group
     Frequency <- DataForFisher %>%
       dplyr::filter(!is.na(Intensity)) %>%
-      dplyr::group_by(Protein, Status) %>%
-      dplyr::summarise(Count = dplyr::n(), .groups = 'drop') %>%
-      group_by(Status, Protein) %>%
-      dplyr::mutate(Percentage = Count/sum(Count) * 100)
+      dplyr::count(Protein, Status) %>%
+      tidyr::pivot_wider(names_from = Status, values_from = n)
 
     Results <- dplyr::bind_rows(Results) %>%
       ## Adjusting p-values for multiple testing
@@ -5001,7 +5000,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 #' @param B The number of bootstrap samples to use for estimating confidence intervals
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
-SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100) {
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "Set1") {
   GlobalData <- dataset
 
   # Ensure Timecol is treated as a column name
@@ -5123,7 +5122,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
   PlotDataAll <- dplyr::bind_rows(PlotData, GlobalPlotData)
 
   # Generate output plot
-  colors <- assign_colors(unique(dataset$Status))
+  colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)),palette = col_pellet)
 
   Plot <- ggplot2::ggplot() +
     ## plot global spline
@@ -5131,27 +5130,25 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
     ## plot CI of global spline
     ggplot2::geom_ribbon(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5)
 
-  if (split_status == T){
-
+  if (split_status == T) {
     ## plot Protein splines for each status
     Plot <- Plot +
-    ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status)) +
-    ## plot CI of Protein splines for each status
-    ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.5)
-
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status)) +
+      ## plot CI of Protein splines for each status
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.5) +
+      ## Apply pre-defined colors
+      ggplot2::scale_color_manual(values = colors) +
+      ggplot2::scale_fill_manual(values = colors)
   }
 
-  if (split_status == F){
-
+  if (split_status == F) {
     ## plot Protein splines for each status
     Plot <- Plot +
       ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit)) +
-      ## plit CI of Protein splines for each status
-      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), alpha = 0.5)
-
-    ## make the CI ribbons the colors specified in colors
-    Plot <- Plot + ggplot2::scale_fill_manual(values = colors)
-
+      ## plot CI of Protein splines for each status
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), alpha = 0.5) +
+      ## Apply colors
+      ggplot2::scale_fill_manual(values = colors)
   }
 
   Plot <- Plot +
@@ -5163,6 +5160,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
     ## make x axis label Timecol
     ggplot2::xlab(rlang::as_label(Timecol))
+
 
   # Create output list
   Output <- list(
@@ -5357,7 +5355,7 @@ MultiWayComaprison <- function(dataset, plotname = ""){
 #' @param dataset The dataset to be tested
 #' @return A list object containing the results of the MEGENA analysis, the module table, the hierarchy plot, the STRING analysis and the correlation plot
 #' @export
-MEGENA <- function(dataset){
+MEGENA <- function(dataset, plotname = ""){
 
   TestData <- dataset %>%
     dplyr::select(Sample, Protein, Intensity) %>%
@@ -5389,11 +5387,17 @@ MEGENA <- function(dataset){
   module.table <- summary.output$module.table
   colnames(module.table)[1] <- "id" # first column of module table must be labelled as "id".
 
-  ## Calculate hierarchy plot
+  ## make hierarchy plot
   hierarchy.obj <- MEGENA::plot_module_hierarchy(module.table = module.table, label.scaleFactor = 0.15,
                                                  arrow.size = 0.03, node.label.color = "blue")
   # Hierarchy plot
   HirarchyPlot <- hierarchy.obj[[1]]
+
+  ## modify Hierarchy plot
+  HirarchyPlot <- HirarchyPlot +
+    ggplot2::ggtitle(plotname) +
+    ## delete legend
+    ggplot2::theme(legend.position = "none")
 
   ## Correlate modules with Status
 
