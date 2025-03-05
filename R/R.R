@@ -4997,10 +4997,11 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 #' @param alpha The confidence level for the confidence intervals
 #' @param split_status A boolean indicating if the model should be split by status
 #' @param plotname The name to be displayed on created plots
+#' @param show_all_proteins A boolean indicating if all proteins should be shown on the plot
 #' @param B The number of bootstrap samples to use for estimating confidence intervals
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
-SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "Set1") {
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "Set1", show_all_proteins = T) {
   GlobalData <- dataset
 
   # Ensure Timecol is treated as a column name
@@ -5124,31 +5125,68 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
   # Generate output plot
   colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)),palette = col_pellet)
 
+  ## generate output ploy
+
   Plot <- ggplot2::ggplot() +
     ## plot global spline
     ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), color = "black") +
     ## plot CI of global spline
     ggplot2::geom_ribbon(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5)
 
+
   if (split_status == T) {
-    ## plot Protein splines for each status
+
+    if (show_all_proteins == T){
+      ## plot Ribbons for all the proteins
+      for(i in 1:length(PoIs)){
+
+        Plot <- Plot +
+
+          ## plot CI of Protein splines
+          ggplot2::geom_ribbon(data = SplineResults %>% filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.02)
+
+      }
+
+    }
+
+
+    ## plot mean Protein splines for each status
     Plot <- Plot +
-      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status)) +
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status), linewidth = 2) +
       ## plot CI of Protein splines for each status
       ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.5) +
       ## Apply pre-defined colors
       ggplot2::scale_color_manual(values = colors) +
       ggplot2::scale_fill_manual(values = colors)
+
+
   }
 
   if (split_status == F) {
-    ## plot Protein splines for each status
+
+    if (show_all_proteins == T){
+
+      ## plot ribbons for every protein
+      for(i in 1:length(PoIs)){
+
+        Plot <- Plot +
+          ## plot CI of Protein splines
+          ggplot2::geom_ribbon(data = SplineResults %>% filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper),fill = "grey", alpha = 0.02)
+
+      }
+
+    }
+
+    ## plot mean Protein spline
     Plot <- Plot +
-      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit)) +
-      ## plot CI of Protein splines for each status
-      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), alpha = 0.5) +
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), linewidth = 2, color = "black") +
+      # plot CI for mean spline
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5) +
+
       ## Apply colors
       ggplot2::scale_fill_manual(values = colors)
+
+
   }
 
   Plot <- Plot +
@@ -5465,12 +5503,5 @@ MEGENA <- function(dataset, plotname = ""){
 
 ## ToDo
 ## Data Manipulation
-## nObsperGroup()
 ## Machine learning
 ## MISC
-## Add progress bar to FindBiomarkerPanel()
-## WGCNA
-## Heatmaps
-## Make an optional interactivity argument for all functions that produce heat maps
-## Plots in general should return a namable opbject for a plot
-## Add a function to create a heatmap from a correlation matrix
