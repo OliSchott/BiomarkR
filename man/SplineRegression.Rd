@@ -10,7 +10,10 @@ SplineRegression(
   Timecol,
   alpha = 0.05,
   split_status = FALSE,
-  plotname = ""
+  plotname = "",
+  B = 100,
+  col_pellet = "Set1",
+  show_all_proteins = T
 )
 }
 \arguments{
@@ -25,6 +28,10 @@ SplineRegression(
 \item{split_status}{A boolean indicating if the model should be split by status}
 
 \item{plotname}{The name to be displayed on created plots}
+
+\item{B}{The number of bootstrap samples to use for estimating confidence intervals}
+
+\item{show_all_proteins}{A boolean indicating if all proteins should be shown on the plot}
 }
 \value{
 A list object containing the results of the spline regression, the confidence intervals and the plot

@@ -4,7 +4,7 @@
 \alias{MEGENA}
 \title{MEGENA}
 \usage{
-MEGENA(dataset)
+MEGENA(dataset, plotname = "")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
