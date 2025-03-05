@@ -5143,7 +5143,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
         Plot <- Plot +
 
           ## plot CI of Protein splines
-          ggplot2::geom_ribbon(data = SplineResults %>% filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.02)
+          ggplot2::geom_ribbon(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.02)
 
       }
 
@@ -5171,7 +5171,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
         Plot <- Plot +
           ## plot CI of Protein splines
-          ggplot2::geom_ribbon(data = SplineResults %>% filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper),fill = "grey", alpha = 0.02)
+          ggplot2::geom_ribbon(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper),fill = "grey", alpha = 0.02)
 
       }
 
@@ -5487,6 +5487,33 @@ MEGENA <- function(dataset, plotname = ""){
 
   }
 
+  ## Calculate correlation between modules
+  ### get modules and their proteins
+  ModuleMembership <- MEGENA.output$node.summary %>%
+    dplyr::select(dplyr::contains("_")) %>%
+    tibble::rownames_to_column(var = "Protein") %>%
+    tidyr::pivot_longer(cols = dplyr::contains("_"), names_to = "Module", values_to = "Member") %>%
+    dplyr::filter(grepl("YES", Member)) %>%
+    dplyr::filter(Module %in% names(summary.output$modules)) %>%
+    dplyr::select(Protein, Module)
+
+  ModuleCorrelationData <- dataset %>%
+    dplyr::select(Sample, Protein, Intensity, !!Timecol) %>%
+    base::merge(ModuleMembership, by = "Protein") %>%
+    ## calculate mean Intensity of every protein in a module at each time point
+    dplyr::group_by(Module, !!Timecol) %>%
+    dplyr::summarise(Intensity = mean(Intensity)) %>%
+    dplyr::select(Module, !!Timecol, Intensity) %>%
+    tidyr::pivot_wider(names_from = !!Timecol, values_from = Intensity) %>%
+    tibble::column_to_rownames(var = "Module") %>%
+    base::t()
+
+  ModuleCorrelationResults <-
+    stats::cor(ModuleCorrelationData, method = "pearson")
+
+  ## make heatmap of ModuleCorrelationResults
+  ModuleCorrelationPlot <-
+    ComplexHeatmap::Heatmap(ModuleCorrelationResults)
 
 
   output <- list()
@@ -5496,6 +5523,8 @@ MEGENA <- function(dataset, plotname = ""){
   output$ModuleTable <- module.table
   output$HirarchyPlot <- HirarchyPlot
   output$CorrelationResults <- CorrelationResultsList
+  output$ModuleCorrelation$Plot <- ModuleCorrelationPlot
+  output$ModuleCorrelation$Matrix <- ModuleCorrelationResults
 
   return(output)
 }
