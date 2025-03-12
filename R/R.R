@@ -1236,160 +1236,53 @@ ComBat <- function(dataset){
 #' @description This function finds the optimal NA cutoff value to maximize the number of significant features by t-test
 #' @param dataset The dataset to be filtered
 #' @param plotname The name to be displayed on created plots
-#' @return A list object the dataset with the optimal NA cutoff value and a plot of the results
+#' @param p.adj.method The method to be used for p-value adjustment ("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
+#' @param Test The test to be used for the analysis ("Wilcox", "Student")
 #' @export
-FindNACutoff <- function(dataset, plotname = ""){
+FindNACutoff <- function(dataset, plotname = "", p.adj.method = "BH", Test = "Wilcox"){
 
-  ## Creating results dataframe
-  Results <- data.frame(col1 = numeric(0), col2 = character(0), col3 = logical(0))
-  ## Renaming columns
-  colnames(Results) <- c("NACutoff","TotalFeatures" ,"SignificantFeatures")
+  Results <- data.frame()
 
-  N <- length(unique(dataset$Sample))
+  ## define range of steps (1 to 100 in steps of 10)
+  Steps <- seq(0, 100, by = 10)
 
-  ## Creating range of cutoffValues to search
-  range <- c(5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90)
+  for(i in Steps){
 
-  if("Protein" %in% colnames(dataset)){
+    TestData <- dataset %>% NaCutoff(i)
 
-    ## Checking the Cutoff values
-    for(i in range){
-      print(paste("Checking NA Cutoff of", i,"/100 %" ))
-      ## Appliying filtering and stuff
-      Temp <- dataset %>%
-        ## applying NA Cutoff
-        ## NA Cutoff On Proteins (Drops every Protein, that contains more than x % missing values)
-        group_by(Protein) %>%
-        ## Checking if the Intensity is NA
-        mutate(ISNA = is.na(Intensity)) %>%
-        ## Counting the number of NAs
-        mutate(SUMNA = sum(ISNA)) %>%
-        ## Calculating total entries for every Protein
-        mutate(ProtTotal = sum(ISNA) + sum(!ISNA)) %>%
-        ## Calculate percentage of missing values
-        mutate(PercentMissing = (SUMNA/ProtTotal)*100) %>%
-        ## Filter for Proteins with
-        filter((100-PercentMissing) >= i) %>%
 
-        ## Dropping remaining NA values
-        drop_na() %>%
-        RankedIntensities(plot = FALSE)
+    if(Test == "Wilcox"){
 
-      ## TTest
-      TTest(Temp,VulcanoPlot = FALSE ,Heatmap = FALSE)
-
-      ## Generating outputs
-      TotalProt <- nrow(rankedIntensities)
-      sigProt <- nrow(TSignificantFeatures)
-
-      Results[i,1] <- i
-      Results[i,2] <- TotalProt
-      Results[i,3] <- sigProt
+      TestResults <- BiomarkR::WTest(dataset = TestData, plotname = plotname, p.adj.method = p.adj.method)
 
     }
+    if(Test == "Student"){
 
-    Results$TotalFeatures <- Results$TotalFeatures %>% as.numeric()
-    Results$SignificantFeatures <- Results$SignificantFeatures %>% as.numeric()
-
-    Results <- Results %>%
-      mutate(UniqueProt = (100/max(TotalFeatures, na.rm = TRUE))*TotalFeatures)
-
-    ## Writing dataframe to global environment
-    NaCutoffData <<- Results %>% drop_na() %>% arrange(-SignificantFeatures)
-
-    ## Setting new cutoff value
-    CutOffNew <- NaCutoffData$NACutoff[1]
-
-    print(paste("The Best Cutoff value was found to be", CutOffNew, "%"))
-
-    ## Apply optimal cutoff vlaue
-    ReturnData <- dataset %>% NaCutoff(cutoffvalue = CutOffNew)
-
-    ## Plotting Results
-    NaCutoffData$NACutoff <- NaCutoffData$NACutoff %>% as.numeric()
-    NaCutoffData$TotalProteins <- NaCutoffData$TotalFeatures %>% as.numeric()
-    NaCutoffData$UniqueProt <- NaCutoffData$UniqueProt %>% as.numeric()
-
-    CutoffPlot <- ggplot(data = NaCutoffData)+
-      geom_point(aes(x = NACutoff, y = UniqueProt),col = "blue") +
-      geom_point(aes(x = NACutoff, y = SignificantFeatures),col = "red") +
-      geom_vline(xintercept = CutOffNew, col = "red") +
-      ggtitle(paste("NA-Cutoff plot", plotname)) +
-      ylab("Feature percentage (blue), absolute number of significant features (red)")
-
-  }
-  if("Peptide" %in% colnames(dataset)) {
-
-    ## Checking the Cutoff values
-    for(i in range){
-      print(paste("Checking NA Cutoff of", i,"/100 %" ))
-      ## Appliying filtering and stuff
-      Temp <- dataset %>%
-        ## applying NA Cutoff
-        ## NA Cutoff On Peptides (Drops every Peptide, that contains more than x % missing values)
-        group_by(Peptide) %>%
-        ## Checking if the Intensity is NA
-        mutate(ISNA = is.na(Intensity)) %>%
-        ## Counting the number of NAs
-        mutate(SUMNA = sum(ISNA)) %>%
-        ## Calculating total entries for every Peptide
-        mutate(ProtTotal = sum(ISNA) + sum(!ISNA)) %>%
-        ## Calculate percentage of missing values
-        mutate(PercentMissing = (SUMNA/ProtTotal)*100) %>%
-        ## Filter for Peptides with
-        filter((100-PercentMissing) >= i) %>%
-
-        ## Dropping remaining NA values
-        drop_na() %>%
-        RankedIntensities(plot = FALSE, feature = "peptide")
-
-      ## TTest
-      TTest(Temp,VulcanoPlot = FALSE ,Heatmap = FALSE, feature = "peptide")
-
-      ## Generating outputs
-      TotalProt <- nrow(rankedIntensities)
-      sigProt <- nrow(TSignificantFeatures)
-
-      Results[i,1] <- i
-      Results[i,2] <- TotalProt
-      Results[i,3] <- sigProt
-
+      TestResults <- BiomarkR::TTest(dataset = TestData, plotname = plotname, p.adj.method = p.adj.method)
     }
-    Results$TotalFeatures <- Results$TotalFeatures %>% as.numeric()
-    Results$SignificantFeatures <- Results$SignificantFeatures %>% as.numeric()
 
-    Results <- Results %>%
-      mutate(UniqueProt = (100/max(TotalFeatures, na.rm = TRUE))*TotalFeatures)
+    nprot <- length(unique(TestData$Protein))
+    SigProt <- nrow(TestResults$Significant)
 
-    ## Writing dataframe to global environment
-    NaCutoffData <- Results %>% drop_na() %>% arrange(-SignificantFeatures)
-
-    ## Setting new cutoff value
-    CutOffNew <- NaCutoffData$NACutoff[1]
-
-    print(paste("The Best Cutoff value was found to be", CutOffNew, "%"))
-
-    ## Apply optimal cutoff vlaue
-    ReturnData <- dataset %>% NaCutoff(cutoffvalue = CutOffNew, feature = "peptide")
-
-    ## Plotting Results
-    NaCutoffData$NACutoff <- NaCutoffData$NACutoff %>% as.numeric()
-    NaCutoffData$TotalPeptides <- NaCutoffData$TotalFeatures %>% as.numeric()
-    NaCutoffData$UniqueProt <- NaCutoffData$UniqueProt %>% as.numeric()
-
-    CutoffPlot <- ggplot(data = NaCutoffData)+
-      geom_point(aes(x = NACutoff, y = UniqueProt),col = "blue") +
-      geom_point(aes(x = NACutoff, y = SignificantFeatures),col = "red") +
-      geom_vline(xintercept = CutOffNew, col = "red") +
-      ggtitle(paste("NA-Cutoff plot", plotname)) +
-      ylab("Feature percentage (blue), absolute number of significant features (red)")
+    ## put results into data frame
+    Results <- rbind(Results, data.frame(NACutoff = i, nprot = nprot, SigProt = SigProt))
 
   }
-  ## Preparing Output Object
-  Output <- list()
-  Output$Cutoffplot <- CutoffPlot
-  Output$NewData <- ReturnData
+
+  ## plot Results
+  Plot <- Results %>%
+    ggplot(aes(x = NACutoff, y = SigProt)) +
+    geom_point() +
+    geom_line() +
+    theme_minimal() +
+    ggtitle("NA Cutoff Optimization") +
+    xlab("NA Cutoff") + ylab("Number of significant Proteins") +
+    ## fix min(y) at zero
+    scale_y_continuous(limits = c(0, max(Results$SigProt)))
+
+  return(list(Results = Results, Plot = Plot))
 }
+
 
 ## T-Test, volcano plot and Heat Map
 ## add roxygen comments
@@ -5108,7 +5001,8 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
         meanFit = mean(meanFit),
 
         .groups = "drop"  # Prevent unwanted grouping in subsequent operations
-      )
+      ) %>%
+      mutate(data = "Protein")
 
   }
 
@@ -5117,7 +5011,8 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
     dplyr::group_by(!!Timecol) %>%
     dplyr::summarise(lower = stats::quantile(global_lower, probs = alpha / 2),
                      upper = stats::quantile(global_upper, probs = 1 - alpha / 2),
-                     meanFit = mean(global_fit), .groups = "drop")
+                     meanFit = mean(global_fit), .groups = "drop") %>%
+    mutate(data = "Global")
 
   ## make one bit dataframe from plotdata and glabalplotdata
   PlotDataAll <- dplyr::bind_rows(PlotData, GlobalPlotData)
@@ -5127,7 +5022,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
   ## generate output ploy
 
-  Plot <- ggplot2::ggplot() +
+  Plot <- ggplot2::ggplot(data = PlotDataAll) +
     ## plot global spline
     ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), color = "black") +
     ## plot CI of global spline
@@ -5204,7 +5099,8 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
   Output <- list(
     GlobalPreds = GlobalData,
     PoIPreds = SplineResults,
-    Plot = Plot
+    Plot = Plot,
+    PlotDataAll = PlotDataAll
   )
 
   return(Output)
