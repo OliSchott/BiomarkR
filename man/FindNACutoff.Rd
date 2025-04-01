@@ -4,15 +4,16 @@
 \alias{FindNACutoff}
 \title{FindNACutoff}
 \usage{
-FindNACutoff(dataset, plotname = "")
+FindNACutoff(dataset, plotname = "", p.adj.method = "BH", Test = "Wilcox")
 }
 \arguments{
 \item{dataset}{The dataset to be filtered}
 
 \item{plotname}{The name to be displayed on created plots}
-}
-\value{
-A list object the dataset with the optimal NA cutoff value and a plot of the results
+
+\item{p.adj.method}{The method to be used for p-value adjustment ("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")}
+
+\item{Test}{The test to be used for the analysis ("Wilcox", "Student")}
 }
 \description{
 This function finds the optimal NA cutoff value to maximize the number of significant features by t-test
