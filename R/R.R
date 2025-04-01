@@ -31,6 +31,9 @@
 #' @import Rtsne
 #' @import grid
 #' @import MEGENA
+#' @import clusterProfiler
+#' @import org.Hs.eg.db
+#' @import pathview
 
 ## Data Import and Management
 ## add roxygen comments
@@ -4831,13 +4834,9 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
       dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category ,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
       dplyr::mutate(`Number of Genes` = number_of_genes)
 
-    ## Top 10 KEGG
-    KEGGEnrichment <- string_db$get_enrichment(mapped_genes$STRING_id, category = "KEGG", iea = T) %>%
-      dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
-      dplyr::mutate(`Number of Genes` = number_of_genes)
 
     ## creating results dataframe
-    Results <- rbind(ProcessEnrichment,FunctionEnrichment,KEGGEnrichment)
+    Results <- rbind(ProcessEnrichment,FunctionEnrichment)
 
     ## creating results plots
     ProcessPlot <- ggplot2::ggplot(Results %>% dplyr::filter(category == "Process"), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
@@ -4855,18 +4854,9 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
       ggtitle(paste("Function enrichment", plotname))+
       theme_light(base_size = 13)
 
-    KEGGPlot <- ggplot2::ggplot(Results %>% dplyr::filter(category == "KEGG"), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
-      geom_point(aes(col = -log10(p_value)))+
-      xlim(0,NA) +
-      ylab("") +
-      xlab("Gene ratio")+
-      ggtitle(paste("KEGG enrichment", plotname))+
-      theme_light(base_size = 13)
-
     ## populating List
     Output$ProcessPlot <- ProcessPlot
     Output$FunctionPlot <- FunctionPlot
-    Output$KEGGPlot <- KEGGPlot
     Output$Table <- Results
   }
   else {
@@ -4877,6 +4867,119 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
   return(Output)
 }
 
+## KEGGEnrichment
+## add roxygen comments
+#' @title KEGGEnrichment
+#' @description KEGG enrichment analysis for the specified dataset.
+#' @param dataset The dataset to be tested
+#' @param PoIs A vector containing the Proteins of interest. Example: c("Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD")
+#' @param plotname The name to be displayed on created plots
+#' @param folder The folder to save the pathway plots
+#' @return A list object containing the results of the KEGG enrichment analysis, the KEGG enrichment plot. The pictures of the pathways are saved in the specified folder
+#' @export
+KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
+
+  GoIs <- stringr::str_split_i(PoIs, "_", 2)
+
+  ## encode GoIs
+  gene_ids <- clusterProfiler::bitr(GoIs, fromType = "SYMBOL",
+                                    toType = "ENTREZID",
+                                    OrgDb = org.Hs.eg.db::org.Hs.eg.db)
+
+  # Extract Entrez IDs
+  gene_ids <- gene_ids$ENTREZID
+
+  KeggBackground <- unique(dataset$Protein)
+  KeggBackground_ids <- clusterProfiler::bitr(GoIs, fromType = "SYMBOL",
+                                              toType = "ENTREZID",
+                                              OrgDb = org.Hs.eg.db::org.Hs.eg.db)
+
+  # Extract Entrez IDs
+  KeggBackground_ids <- KeggBackground_ids$ENTREZID
+
+  KEGG <- clusterProfiler::enrichKEGG(gene = gene_ids, organism = 'hsa', keyType = 'kegg',
+                                      qvalueCutoff = 0.01, universe = KeggBackground_ids,
+                                      pAdjustMethod = "BH")
+
+  ## skip rest of the fucntion if KEGG == NULL
+  if(is.null(KEGG)){
+    print("No enriched KEGG pathways")
+    return(NULL)
+  }
+
+  ## make KEGG plot
+  KEGGTable <- KEGG@result %>% dplyr::as_tibble() %>%
+    dplyr::filter(!category == "Metabolism")
+
+  ## skip if nrow of KEGGTable == 0
+  if(nrow(KEGGTable) == 0){
+    print("No enriched KEGG pathways")
+    return(NULL)
+  }
+
+  KeggPlotData <- KEGGTable %>% dplyr::select(Description, GeneRatio, qvalue) %>%
+    dplyr::arrange(qvalue) %>% utils::head(10) %>%
+    dplyr::mutate(GenesFound = stringr::str_split_i(GeneRatio, "/", 1)) %>%
+    dplyr::mutate(GenesTotal = stringr::str_split_i(GeneRatio, "/", 2)) %>%
+    ## make Genesfound and Genetotal numeric
+    dplyr::mutate(GenesFound = as.numeric(GenesFound), GenesTotal = as.numeric(GenesTotal)) %>%
+    ## calculate gene ratio
+    dplyr::mutate(GeneRatio = GenesFound/GenesTotal)
+
+  KEGGPlot <- ggplot2::ggplot(KeggPlotData, ggplot2::aes(x = GeneRatio, y = stats::reorder(Description, GeneRatio),  size = GeneRatio))+
+    ggplot2::geom_point(ggplot2::aes(col = -log10(qvalue)))+
+    ggplot2::xlim(0,NA) +
+    ggplot2::ylab("") +
+    ggplot2::xlab("Gene ratio")+
+    ggplot2::ggtitle(paste("KEGG enrichment", plotname))+
+    ggplot2::theme_light(base_size = 13)
+
+  ## make pathway plots
+
+  gene_ids <- clusterProfiler::bitr(GoIs, fromType = "SYMBOL",
+                                    toType = "ENTREZID",
+                                    OrgDb = org.Hs.eg.db::org.Hs.eg.db) %>%
+    dplyr::rename(Gene = SYMBOL, ID = ENTREZID)
+
+  gene_ids <- gene_ids %>% dplyr::distinct(Gene, .keep_all = TRUE)
+
+  WtestResults <- WTest(dataset %>% dplyr::filter(Protein %in% PoIs))
+
+  PathwayData <- WtestResults$raw %>%
+    dplyr::mutate(Gene = stringr::str_split_i(Protein,"_", 2)) %>%
+    dplyr::select(Gene,estimate) %>%
+    base::merge(gene_ids, by = "Gene") %>%
+    dplyr::select(ID, estimate) %>%
+    tibble::column_to_rownames(var= "ID")
+
+  Pathways <-  KEGGTable %>% dplyr::as_tibble() %>%
+    dplyr::arrange(qvalue) %>% utils::head(10) %>%
+    dplyr::select(ID)
+
+  ## set wd to folder
+  if(!is.na(folder)){
+    base::setwd(folder)
+  }
+
+  for(i in 1:base::nrow(Pathways)){
+
+    pathview::pathview(PathwayData, pathway.id = Pathways$ID[i], kegg.native = TRUE,
+                       limit = list(gene = base::max(base::abs(PathwayData)), cpd = 1),
+                       low = list(gene = "blue", cpd = "blue"),
+                       mid = list(gene = "gray", cpd = "gray"),
+                       high = list(gene = "red", cpd = "red"))
+  }
+
+  ## delete everything in folder that does not have "pathview" in its name
+  if(!is.na(folder)){
+    files <- base::list.files()
+    files <- files[!base::grepl("pathview", files)]
+    base::file.remove(files)
+  }
+
+  return(base::list(KEGGPlot = KEGGPlot,
+                    KeggData = KEGGTable))
+}
 
 
 ## High order functions
