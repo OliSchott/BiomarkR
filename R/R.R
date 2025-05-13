@@ -4782,7 +4782,7 @@ kffs <- function(dataset, method = "SVM", kfolds = 10){
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the STRING analysis, the STRING network plot and the STRING enrichment plots
 #' @export
-STRING <- function(PoIs, STRINGBackground ,plotname = ""){
+STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Blues"){
 
   ## Creating Input Dataframe
   Input <- data.frame(PoIs)
@@ -4800,7 +4800,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
 
   background_gene_df <- background_gene_list %>%
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
-    select(Gene)
+    dplyr::select(Gene)
 
   ## initilizing string object
   string_db <- STRINGdb$new(version = "11.0", species = 9606, score_threshold = 400, input_directory = "")
@@ -4845,14 +4845,16 @@ STRING <- function(PoIs, STRINGBackground ,plotname = ""){
       ylab("") +
       xlab("Gene ratio")+
       ggtitle(paste("Process enrichment", plotname))+
-      theme_light(base_size = 13)
+      theme_light(base_size = 13)+
+      scale_color_distiller(palette = colPellet, direction = 1)  # Reverse the palette so higher values have darker colors
 
     FunctionPlot <- ggplot2::ggplot(Results %>% dplyr::filter(category == "Function"), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
       geom_point(aes(col = -log10(p_value)))+
       ylab("") +
       xlab("Gene ratio")+
       ggtitle(paste("Function enrichment", plotname))+
-      theme_light(base_size = 13)
+      theme_light(base_size = 13) +
+      scale_color_distiller(palette = colPellet, direction = 1)  # Reverse the palette so higher values have darker colors
 
     ## populating List
     Output$ProcessPlot <- ProcessPlot
@@ -5494,7 +5496,7 @@ MEGENA <- function(dataset, plotname = ""){
   output$ModuleTable <- module.table
   output$HirarchyPlot <- HirarchyPlot
   output$CorrelationResults <- CorrelationResultsList
-
+  output$CorrelationMatrix <- cor_matrix
 
   return(output)
 }
