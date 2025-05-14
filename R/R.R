@@ -1501,7 +1501,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @return A list object containing the results of the Wilcox test, the significant features and a volcano plot
 #' @export
-WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH") {
+WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH", ColPalette = "Set1") {
   datasetW <- dataset %>% dplyr::arrange(Status)
 
   Status1 <- unique(datasetW$Status)[1] %>% as.character()
@@ -1672,13 +1672,13 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 
   if("Protein" %in% colnames(dataset)){
 
-    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Protein,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Protein,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Protein, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F, plotname = plotname, ColPalette = ColPalette)
 
   }
 
   if("Peptide" %in% colnames(dataset)){
 
-    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Peptide,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname)
+    Heatmap <- BiomarkR::HeatMap(datasetW %>% select(c(Sample,Peptide,Intensity,Status)), PoIs = WilcoxSignificantFeatures$Peptide, method = method, clustDist = clustDist, show_column_names = F, show_row_names = F,plotname = plotname, ColPalette = ColPalette)
 
 
   }
@@ -2387,10 +2387,10 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @return A plot object
 #' @export
-BoxPlotsFeatures <- function(dataset, PoIs, plotname = "") {
+BoxPlotsFeatures <- function(dataset, PoIs, plotname = "", pellet = "Set1") {
 
   ## generate colors
-  colors <- assign_colors(unique(dataset$Status))
+  colors <- assign_colors(unique(dataset$Status), palette = pellet)
 
   if ("Protein" %in% colnames(dataset)) {
     BoxPlotData <- dataset %>%
