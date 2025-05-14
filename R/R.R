@@ -654,13 +654,13 @@ assign_colors <- function(labels, palette = "okabe_ito") {
   # Generate colors
   colors <- switch(
     palette,
-    "okabe_ito" = rep(c("#2CA02C",  # strong green
+    "okabe_ito" = rep(c("#9467BD",  # vibrant purple
                         "#FF7F0E",  # vivid orange
+                        "#2CA02C",  # strong green
                         "#1F77B4",  # vibrant blue
                         "#D62728",  # bold red
                         "#FFD700",  # bright gold
                         "#17BECF",  # cyan-ish blue
-                        "#9467BD",  # vibrant purple
                         "#8C564B"   # warm brown
     ), length.out = n),
     "viridis"   = viridisLite::viridis(n),
