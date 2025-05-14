@@ -1516,7 +1516,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @return A list object containing the results of the Wilcox test, the significant features and a volcano plot
 #' @export
-WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH", ColPalette = "Set1") {
+WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH", ColPalette = "okabe_ito") {
   datasetW <- dataset %>% dplyr::arrange(Status)
 
   Status1 <- unique(datasetW$Status)[1] %>% as.character()
@@ -2512,7 +2512,7 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @param fontsize The fontsize to be used for the annotations (numeric value)
 #' @return A Heatmap object
 #' @export
-HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "Set1", contColors = c("yellow", "purple"), fontsize = 8) {
+HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "okabe_ito", contColors = c("yellow", "purple"), fontsize = 8) {
   ## creating heat map Data
   if ("Protein" %in% colnames(dataset)) {
     HeatMapData <- dataset %>%
@@ -2879,7 +2879,7 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F, ColPalette = "Set1"){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F, ColPalette = "okabe_ito"){
 
   if("Protein" %in% colnames(dataset)){
 
@@ -3141,7 +3141,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the UMAP calculations and the UMAP plot
 #' @export
-UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "Set1") {
+UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "okabe_ito") {
 
   ## error of missing values in Intensity column
   if (base::any(base::is.na(dataset$Intensity))) {
@@ -3293,7 +3293,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "Set1") {
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the tSNE calculations and the tSNE plot
 #' @export
-tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "Set1") {
+tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "okabe_ito") {
 
   ## Error if missing values in object
   if (any(is.na(dataset$Intensity))) {
