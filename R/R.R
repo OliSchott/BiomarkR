@@ -642,23 +642,38 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
 ## a function to assign colors from a Brewer’s palette to entries in a vector
 ## add roxygen comments
 #' @title assign_colors
-#' @description This function assigns colors from a Brewer’s palette to entries in a vector
+#' @description This function assigns colors from different pellets to a list of labels
 #' @param unique_entries A vector of unique entries (like unique(dataset$Status))
-#' @param palette The name of the Brewer palette to be used (default = "Set1")
+#' @param palette Color pellets c("okabe_ito", "viridis", "plasma", "magma", "inferno")
 #' @return A color mapping
 #' @export
-assign_colors <- function(unique_entries, palette = "Set1") {
-  # Get the Set1 palette
-  palette <- RColorBrewer::brewer.pal(max(length(unique_entries), 9), palette)
+assign_colors <- function(labels, palette = "okabe_ito") {
+  labels <- unique(labels)
+  n <- length(labels)
 
-  # Ensure the number of colors matches the number of unique entries
-  palette <- rep(palette, length.out = length(unique_entries))
+  # Generate colors
+  colors <- switch(
+    palette,
+    "okabe_ito" = rep(c("#FF7F0E",  # vivid orange
+                        "#1F77B4",  # vibrant blue
+                        "#2CA02C",  # strong green
+                        "#FFD700",  # bright gold
+                        "#17BECF",  # cyan-ish blue
+                        "#D62728",  # bold red
+                        "#9467BD",  # vibrant purple
+                        "#8C564B"   # warm brown
+    ), length.out = n),
+    "viridis"   = viridisLite::viridis(n),
+    "plasma"    = viridisLite::plasma(n),
+    "magma"     = viridisLite::magma(n),
+    "inferno"   = viridisLite::inferno(n),
+    stop("Unknown palette")
+  )
 
-  # Assign colors to each unique entry
-  color_mapping <- stats::setNames(palette, unique_entries)
-
-  return(color_mapping)
+  # Return named vector
+  setNames(colors, labels)
 }
+
 
 
 ## Imputation of missing value (default method = "mean")
