@@ -654,12 +654,12 @@ assign_colors <- function(labels, palette = "okabe_ito") {
   # Generate colors
   colors <- switch(
     palette,
-    "okabe_ito" = rep(c("#FF7F0E",  # vivid orange
+    "okabe_ito" = rep(c("#2CA02C",  # strong green
+                        "#FF7F0E",  # vivid orange
                         "#1F77B4",  # vibrant blue
-                        "#2CA02C",  # strong green
+                        "#D62728",  # bold red
                         "#FFD700",  # bright gold
                         "#17BECF",  # cyan-ish blue
-                        "#D62728",  # bold red
                         "#9467BD",  # vibrant purple
                         "#8C564B"   # warm brown
     ), length.out = n),
