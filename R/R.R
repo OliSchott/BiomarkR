@@ -644,24 +644,24 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
 #' @title assign_colors
 #' @description This function assigns colors from different pellets to a list of labels
 #' @param unique_entries A vector of unique entries (like unique(dataset$Status))
-#' @param palette Color pellets c("okabe_ito", "viridis", "plasma", "magma", "inferno")
+#' @param palette Color pellets c("custom_vibrant", "viridis", "plasma", "magma", "inferno")
 #' @return A color mapping
 #' @export
-assign_colors <- function(labels, palette = "okabe_ito") {
+assign_colors <- function(labels, palette = "custom_vibrant") {
   labels <- unique(labels)
   n <- length(labels)
 
   # Generate colors
   colors <- switch(
     palette,
-    "okabe_ito" = rep(c("#9467BD",  # vibrant purple
-                        "#FF7F0E",  # vivid orange
-                        "#2CA02C",  # strong green
-                        "#1F77B4",  # vibrant blue
-                        "#D62728",  # bold red
-                        "#FFD700",  # bright gold
-                        "#17BECF",  # cyan-ish blue
-                        "#8C564B"   # warm brown
+    "custom_vibrant" = rep(c("#FFAA00",  # golden orange
+                        "#9932CC",  # purple (avoid bluish ones)
+                        "#00C19F",  # teal / sea green
+                        "#ADFF2F",  # lime green (replaces yellow)
+                        "#8B8000",  # olive
+                        "#FF69B4",  # hot pink
+                        "#A0522D",  # sienna brown
+                        "#40E0D0"   # turquoise (on the greenish side)
     ), length.out = n),
     "viridis"   = viridisLite::viridis(n),
     "plasma"    = viridisLite::plasma(n),
@@ -1516,7 +1516,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
 #' @return A list object containing the results of the Wilcox test, the significant features and a volcano plot
 #' @export
-WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH", ColPalette = "okabe_ito") {
+WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "euclidean", p.adj.method = "BH", ColPalette = "custom_vibrant") {
   datasetW <- dataset %>% dplyr::arrange(Status)
 
   Status1 <- unique(datasetW$Status)[1] %>% as.character()
@@ -2512,7 +2512,7 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @param fontsize The fontsize to be used for the annotations (numeric value)
 #' @return A Heatmap object
 #' @export
-HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "okabe_ito", contColors = c("yellow", "purple"), fontsize = 8) {
+HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "custom_vibrant", contColors = c("yellow", "purple"), fontsize = 8) {
   ## creating heat map Data
   if ("Protein" %in% colnames(dataset)) {
     HeatMapData <- dataset %>%
@@ -2879,7 +2879,7 @@ MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the PCA calculations and the PCA plot
 #' @export
-PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F, ColPalette = "okabe_ito"){
+PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading = TRUE, topNLoading = 3, show_ellipse = F, ColPalette = "custom_vibrant"){
 
   if("Protein" %in% colnames(dataset)){
 
@@ -3141,7 +3141,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the UMAP calculations and the UMAP plot
 #' @export
-UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "okabe_ito") {
+UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "custom_vibrant") {
 
   ## error of missing values in Intensity column
   if (base::any(base::is.na(dataset$Intensity))) {
@@ -3293,7 +3293,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "okabe_it
 #' @param show_ellipse Logical value indicating if the 95% confidence ellipse should be plotted
 #' @return A list object containing the results of the tSNE calculations and the tSNE plot
 #' @export
-tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "okabe_ito") {
+tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "custom_vibrant") {
 
   ## Error if missing values in object
   if (any(is.na(dataset$Intensity))) {
