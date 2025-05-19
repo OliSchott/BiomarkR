@@ -2404,6 +2404,8 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @export
 BoxPlotsFeatures <- function(dataset, PoIs, plotname = "", pellet = "Set1") {
 
+  dataset <- dataset %>% arrange(Status)
+
   ## generate colors
   colors <- assign_colors(unique(dataset$Status), palette = pellet)
 
@@ -2513,6 +2515,9 @@ PlotHistogram <- function(dataset, PoIs, plotname = ""){
 #' @return A Heatmap object
 #' @export
 HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclidean", plotname = "", show_column_names = FALSE, show_row_names = FALSE, column_split = NULL, row_split = NULL, cluster_columns = TRUE, Annotations = NULL, ColPalette = "custom_vibrant", contColors = c("yellow", "purple"), fontsize = 8) {
+
+  dataset <- dataset %>% dplyr::arrange(Status)
+
   ## creating heat map Data
   if ("Protein" %in% colnames(dataset)) {
     HeatMapData <- dataset %>%
@@ -3190,6 +3195,8 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "custom_v
       tibble::column_to_rownames("Sample") %>%
       dplyr::select(dplyr::contains("_"))
   }
+
+  set.seed(2105)  # Use any fixed number for reproducability
 
   # Perform UMAP with three components
   UMAP <- umap::umap(UmapDataQuant, n_components = 3)
