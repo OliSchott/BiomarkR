@@ -2402,7 +2402,7 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @return A plot object
 #' @export
-BoxPlotsFeatures <- function(dataset, PoIs, plotname = "", pellet = "Set1") {
+BoxPlotsFeatures <- function(dataset, PoIs, plotname = "", pellet = "custom_vibrant") {
 
   dataset <- dataset %>% arrange(Status)
 
@@ -4914,7 +4914,8 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
   gene_ids <- gene_ids$ENTREZID
 
   KeggBackground <- unique(dataset$Protein)
-  KeggBackground_ids <- clusterProfiler::bitr(GoIs, fromType = "SYMBOL",
+  BackgroundGoIs <- stringr::str_split_i(KeggBackground, "_", 2)
+  KeggBackground_ids <- clusterProfiler::bitr(BackgroundGoIs, fromType = "SYMBOL",
                                               toType = "ENTREZID",
                                               OrgDb = org.Hs.eg.db::org.Hs.eg.db)
 
@@ -4922,10 +4923,11 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
   KeggBackground_ids <- KeggBackground_ids$ENTREZID
 
   KEGG <- clusterProfiler::enrichKEGG(gene = gene_ids, organism = 'hsa', keyType = 'kegg',
-                                      qvalueCutoff = 0.01, universe = KeggBackground_ids,
-                                      pAdjustMethod = "BH")
+                                      qvalueCutoff = 0.01,
+                                      pAdjustMethod = "BH",
+                                      universe = KeggBackground_ids)
 
-  ## skip rest of the fucntion if KEGG == NULL
+  ## skip rest of the function if KEGG == NULL
   if(is.null(KEGG)){
     print("No enriched KEGG pathways")
     return(NULL)
@@ -4933,7 +4935,8 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
 
   ## make KEGG plot
   KEGGTable <- KEGG@result %>% dplyr::as_tibble() %>%
-    dplyr::filter(!category == "Metabolism")
+    dplyr::filter(!category == "Metabolism") %>%
+    filter(qvalue <0.05)
 
   ## skip if nrow of KEGGTable == 0
   if(nrow(KEGGTable) == 0){
@@ -4985,6 +4988,7 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
     base::setwd(folder)
   }
 
+  ## make KEGG plots with colored fold changes and save them to the folder
   for(i in 1:base::nrow(Pathways)){
 
     pathview::pathview(PathwayData, pathway.id = Pathways$ID[i], kegg.native = TRUE,
@@ -4999,6 +5003,11 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
     files <- base::list.files()
     files <- files[!base::grepl("pathview", files)]
     base::file.remove(files)
+  }
+
+  ## write KEGGTable to the folder
+  if(!is.na(folder)){
+    utils::write.csv(KEGGTable, file = base::paste0("KEGGTable.csv"), row.names = FALSE)
   }
 
   return(base::list(KEGGPlot = KEGGPlot,
