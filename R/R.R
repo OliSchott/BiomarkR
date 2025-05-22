@@ -5174,7 +5174,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
         Plot <- Plot +
 
           ## plot CI of Protein splines
-          ggplot2::geom_ribbon(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.02)
+          ggplot2::geom_line(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = fit ,col = Status), alpha = 0.2)
 
       }
 
@@ -5202,7 +5202,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
         Plot <- Plot +
           ## plot CI of Protein splines
-          ggplot2::geom_ribbon(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper),fill = "grey", alpha = 0.02)
+          ggplot2::geom_line(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = fit),col = "grey", alpha = 0.5)
 
       }
 
@@ -5241,6 +5241,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
   return(Output)
 }
+
 
 
 ## add roxygen comments
