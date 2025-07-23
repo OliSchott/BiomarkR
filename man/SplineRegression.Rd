@@ -12,7 +12,7 @@ SplineRegression(
   split_status = FALSE,
   plotname = "",
   B = 100,
-  col_pellet = "Set1",
+  col_pellet = "custom_vibrant",
   show_all_proteins = T
 )
 }

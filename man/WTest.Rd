@@ -9,7 +9,8 @@ WTest(
   plotname = "",
   method = "unsupervised",
   clustDist = "euclidean",
-  p.adj.method = "BH"
+  p.adj.method = "BH",
+  ColPalette = "custom_vibrant"
 )
 }
 \arguments{

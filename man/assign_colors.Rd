@@ -4,16 +4,16 @@
 \alias{assign_colors}
 \title{assign_colors}
 \usage{
-assign_colors(unique_entries, palette = "Set1")
+assign_colors(labels, palette = "custom_vibrant")
 }
 \arguments{
-\item{unique_entries}{A vector of unique entries (like unique(dataset$Status))}
+\item{palette}{Color pellets c("custom_vibrant", "viridis", "plasma", "magma", "inferno")}
 
-\item{palette}{The name of the Brewer palette to be used (default = "Set1")}
+\item{unique_entries}{A vector of unique entries (like unique(dataset$Status))}
 }
 \value{
 A color mapping
 }
 \description{
-This function assigns colors from a Brewer’s palette to entries in a vector
+This function assigns colors from different pellets to a list of labels
 }

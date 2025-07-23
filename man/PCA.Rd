@@ -12,7 +12,7 @@ PCA(
   plotTopNLoading = TRUE,
   topNLoading = 3,
   show_ellipse = F,
-  ColPalette = "Set1"
+  ColPalette = "custom_vibrant"
 )
 }
 \arguments{

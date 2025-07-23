@@ -4,7 +4,7 @@
 \alias{BoxPlotsFeatures}
 \title{BoxPlotsFeatures}
 \usage{
-BoxPlotsFeatures(dataset, PoIs, plotname = "")
+BoxPlotsFeatures(dataset, PoIs, plotname = "", pellet = "custom_vibrant")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}

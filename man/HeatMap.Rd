@@ -16,7 +16,7 @@ HeatMap(
   row_split = NULL,
   cluster_columns = TRUE,
   Annotations = NULL,
-  ColPalette = "Set1",
+  ColPalette = "custom_vibrant",
   contColors = c("yellow", "purple"),
   fontsize = 8
 )
