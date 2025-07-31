@@ -199,7 +199,6 @@ SampleRandomization <- function(df, group_vars, IDColumn) {
   return(Results)
 }
 
-
 ## add roxygen comments
 #' @title GenerateSampleIDsFromFilePath
 #' @description This function generates random sample IDs for a given dataset
@@ -236,7 +235,7 @@ GenerateSampleIDsFromFilePath <- function(filepath){
   ## Rename column to "Sample ID"
   colnames(SampleFrame)[1] <- "Sample ID"
   ## write excel readable file into working directory
-  write_excel_csv(SampleFrame, file = paste(docname,"with Sample","IDs"))
+  write_excel_csv(SampleFrame, file = paste(docname,"with Sample","IDs.csv"))
   ## confirm that everything went ok
   print(paste("Sample ID table safet to:", getwd()))
 }
@@ -373,7 +372,6 @@ ImportMSData <- function(filepath, feature = "Protein", programm = "DIA-NN") {
   return(base::invisible(dataset))
 
 }
-
 
 ## only DIA-NN Data can be imported ATM
 
@@ -516,7 +514,6 @@ NaCutoff <- function(dataset, cutoffvalue = 70) {
     }
   return(Results)
 }
-
 
 ## Pipeline functions
 ## The pipeline functions are a collection of functions that are for easy data manipulation
@@ -663,8 +660,6 @@ assign_colors <- function(labels, palette = "custom_vibrant") {
   setNames(colors, labels)
 }
 
-
-
 ## Imputation of missing value (default method = "mean")
 ## add roxygen comments
 #' @title ImputeFeatureIntensity
@@ -774,8 +769,6 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
 
   return(base::invisible(dataset))
 }
-
-## method c("mean", "zero", "half_min")
 
 ## Intensity normalization on Intensities grouped by Protein (default method ="median')
 ## add roxygen comments
@@ -942,7 +935,6 @@ normalizeIntensityOnFeature <- function(dataset , method = "minmax", plot = FALS
   ## Returning normalized dataset
   return(invisible(dataset_norm))
 }
-## method <- c("median", "mean", "z-score", MinMax)
 
 ## Intensity normalization on Intensities grouped by Samples
 ## add roxygen comments
@@ -1019,7 +1011,6 @@ normalizeIntensityOnSample <- function(dataset, method = "minmax", plot = FALSE)
   return(invisible(dataNorm))
 
 }
-## method <- c("median", "mean", "z-score", MinMax)
 
 ## CompletentessAnlysis
 ## add roxygen comments
@@ -1068,7 +1059,6 @@ CompletenessAnalysis <- function(dataset){
 
   return(Output)
 }
-
 
 ## Non-pipeline functions
 ## Outlier Removal (from Patrick`s markdown code)
@@ -1289,7 +1279,6 @@ FindNACutoff <- function(dataset, plotname = "", p.adj.method = "BH", Test = "Wi
 
   return(list(Results = Results, Plot = Plot))
 }
-
 
 ## T-Test, volcano plot and Heat Map
 ## add roxygen comments
@@ -1739,13 +1728,12 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
         tibble::column_to_rownames("Status") %>%
         as.matrix()
 
-      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE,)
+      FisherResults <- rstatix::fisher_test(ConfusionMatrix, detailed = TRUE)
 
       Protein <- ContingencyTable[[i]]$Protein[1]
       p <- FisherResults$p
-      n <- FisherResults$n
 
-      Results[[i]] <- data.frame(Protein, p, n)
+      Results[[i]] <- data.frame(Protein, p)
 
     }
   }
@@ -1781,9 +1769,8 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 
       Peptide <- ContingencyTable[[i]]$Peptide[1]
       p <- FisherResults$p
-      n <- FisherResults$n
 
-      Results[[i]] <- data.frame(Peptide, p, n)
+      Results[[i]] <- data.frame(Peptide, p)
 
   }
 
@@ -1839,7 +1826,6 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 
 
 }
-
 
 ## ANOVA
 ## add roxygen comments
@@ -2188,7 +2174,8 @@ LogisticRegressionSingleFeature <- function(dataset, PoI){
 #' @export
 AUCs <- function(dataset, PoIs, plotname = "") {
 
-  dataset <- dataset %>% dplyr::arrange(Status)
+  dataset <- dataset %>% dplyr::arrange(Status) %>%
+    dplyr::filter(!is.na(Intensity))
   ## Calculate difference betwen mean exrpession in status
   ### Check if dataset has more than 2 unique entries in Status
   if(length(unique(dataset$Status)) > 2){
@@ -2304,7 +2291,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     ## fix y axis from 0 to 1
     ggplot2::scale_y_continuous(limits = c(0.5, 1)) +
     ## rename axis
-    ggplot2::xlab(paste("Fold Change in ", Status1)) +
+    ggplot2::xlab(paste("Log 2 Fold Change in ", Status1)) +
     ggplot2::ylab("AUC") +
     ## add title
     ggplot2::ggtitle(plotname) +
