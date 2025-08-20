@@ -287,15 +287,6 @@ ImportMSData <- function(filepath, feature = "Protein", programm = "DIA-NN") {
       dataset <- tibble::rownames_to_column(dataset, "Sample")
       dataset <- tidyr::gather(dataset, key = "Protein", value = "Intensity", base::colnames(dataset)[2:base::ncol(dataset)])
 
-
-      ## Checking if import was successful
-      if (base::ncol(dataset) == 3 &
-          base::sum(base::colnames(dataset) == c("Sample", "Protein", "Intensity")) == 3) {
-        base::print("Import successful")
-      } else {
-        base::print("Something went wrong during data Import")
-      }
-
     }
 
     ## Importing Peptide Data
@@ -325,7 +316,6 @@ ImportMSData <- function(filepath, feature = "Protein", programm = "DIA-NN") {
       ## Checking if import was successful
       if (base::ncol(dataset) == 3 &
           base::sum(base::colnames(dataset) == c("Sample", "Peptide", "Intensity")) == 3) {
-        base::print("Import successful")
       } else {
         base::print("Something went wrong during data Import")
       }
@@ -364,7 +354,6 @@ ImportMSData <- function(filepath, feature = "Protein", programm = "DIA-NN") {
   ## Checking if import was successful
   if (base::ncol(dataset) == 3 &
       base::sum(base::colnames(dataset) == c("Sample", "Protein", "Intensity")) == 3) {
-    base::print("Import successful")
   } else {
     base::print("Something went wrong during data Import")
   }
@@ -2979,7 +2968,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
     theme(strip.background = element_rect(fill = "white"),
           strip.text = element_text(colour = "black")) +
     if(show_ellipse == T){
-      geom_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
+      ggplot2::stat_ellipse(aes(x = PlotPC1, y = PlotPC2, color = Status), level = 0.95, linetype = 2)
     }
 
   ## change the colors if Status is numeric
@@ -3720,7 +3709,7 @@ BiomarkerPanel <- function(dataset, PoIs, n){
         current_combination <- current_permutation[[j]]
 
         ## model
-        model <- BiomarkR::GLM(dataset, PoIs = current_combination)
+        model <- BiomarkR::GLM(dataset, PoIs = current_combination, crossvalidation = T)
 
         AUC <- model$AUC
 
