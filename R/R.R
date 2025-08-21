@@ -1328,7 +1328,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       dplyr::group_by(Status, Protein) %>%
       dplyr::summarise(meanInt = mean(Intensity, na.rm = TRUE)) %>%
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
-      dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
+      dplyr::mutate(FC = (.[[Status1]] - .[[Status2]])) %>%
       dplyr::mutate(FC = 2**FC)
 
     VulconaoPlotData <- merge(TResults, FoldChangeData, by = "Protein") %>%
