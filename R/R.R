@@ -1182,30 +1182,32 @@ RemoveOutliers <- function(dataset, Stdev = 2, plotname = "Outlier plot", plot =
 #' @export
 ComBat <- function(dataset){
 
+  ## Error if NA values in Intenisty
+  if(base::sum(base::is.na(dataset$Intensity)) > 0){
+    stop("Dataset contains NA values. Please impute or remove missing values before running ComBat")
+  }
+
   ## Preparing Quant Data
   ComBatDataQaunt <- dataset %>%
-    ## Impute missing values
-    NaCutoff(50) %>%
-    ImputeFeatureIntensity() %>%
     ## Pivot wider
-    pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
+    tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
     ## Select Proteins
-    select(contains("_")) %>%
+    dplyr::select(contains("_")) %>%
     t() %>% as.matrix()
 
   ComBatDataClin <- dataset %>%
-    pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    select(!contains("_"))
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    dplyr::select(!contains("_"))
 
   colnames(ComBatDataQaunt) <- ComBatDataClin$Sample
 
   PlateVector <- ComBatDataClin$Plate
 
-  CorrectedData <- sva::ComBat(dat = ComBatDataQaunt, batch = PlateVector, prior.plots = TRUE) %>%
-    t() %>%
+  CorrectedData <- sva::ComBat(dat = ComBatDataQaunt, batch = PlateVector, prior.plots = F, mean.only = T, par.prior = F) %>%
+    base::t() %>%
     data.frame() %>%
-    rownames_to_column(var = "Sample") %>%
-    pivot_longer(cols = -"Sample", names_to = "Protein", values_to = "Intensity")
+    tibble::rownames_to_column(var = "Sample") %>%
+    tidyr::pivot_longer(cols = -"Sample", names_to = "Protein", values_to = "Intensity")
 
   CorrectedData <- merge(ComBatDataClin, CorrectedData , by = "Sample")
 
