@@ -4813,44 +4813,36 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Blues"){
     string_db$set_background(background_mapped_genes$STRING_id)
 
     ## perform enrichemnt Analysis
+    EnrichmentResults <- string_db$get_enrichment(mapped_genes$STRING_id, iea = T)
 
-    ## Top 10 Processes
-    ProcessEnrichment <- string_db$get_enrichment(mapped_genes$STRING_id ,category = "Process", iea = T) %>%
-      dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
-      dplyr::mutate(`Number of Genes` = number_of_genes)
+    Categories <- unique(EnrichmentResults$category)
+
+    Plots <- list()
+
+    for(Category in Categories){
+
+      PlotData <- EnrichmentResults %>% filter(category == Category) %>%
+        dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
+        dplyr::mutate(`Number of Genes` = number_of_genes)
+
+      Plot <- ggplot2::ggplot((PlotData), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
+        geom_point(aes(col = -log10(p_value)))+
+        xlim(0,NA) +
+        ylab("") +
+        xlab("Gene ratio")+
+        ggtitle(paste(Category, "enrichment", plotname))+
+        theme_light(base_size = 13)+
+        scale_color_distiller(palette = colPellet, direction = 1)
+
+      ## put plot in Plots
+      Plots[[Category]] <- Plot
+    }
 
 
-    ## Top 10 Functional Pathways
-    FunctionEnrichment <- string_db$get_enrichment(mapped_genes$STRING_id, category = "Function", iea = T) %>%
-      dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category ,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
-      dplyr::mutate(`Number of Genes` = number_of_genes)
-
-
-    ## creating results dataframe
-    Results <- rbind(ProcessEnrichment,FunctionEnrichment)
-
-    ## creating results plots
-    ProcessPlot <- ggplot2::ggplot(Results %>% dplyr::filter(category == "Process"), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
-      geom_point(aes(col = -log10(p_value)))+
-      xlim(0,NA) +
-      ylab("") +
-      xlab("Gene ratio")+
-      ggtitle(paste("Process enrichment", plotname))+
-      theme_light(base_size = 13)+
-      scale_color_distiller(palette = colPellet, direction = 1)  # Reverse the palette so higher values have darker colors
-
-    FunctionPlot <- ggplot2::ggplot(Results %>% dplyr::filter(category == "Function"), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
-      geom_point(aes(col = -log10(p_value)))+
-      ylab("") +
-      xlab("Gene ratio")+
-      ggtitle(paste("Function enrichment", plotname))+
-      theme_light(base_size = 13) +
-      scale_color_distiller(palette = colPellet, direction = 1)  # Reverse the palette so higher values have darker colors
 
     ## populating List
-    Output$ProcessPlot <- ProcessPlot
-    Output$FunctionPlot <- FunctionPlot
-    Output$Table <- Results
+    Output$Plots <- Plots
+    Output$Table <- EnrichmentResults
   }
   else {
     print("No mapped genes for the input list")
@@ -5001,21 +4993,40 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
 #' @param B The number of bootstrap samples to use for estimating confidence intervals
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
-SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "custom_vibrant", show_all_proteins = T) {
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "custom_vibrant", show_all_proteins = T, df = 3) {
 
   GlobalData <- dataset %>% dplyr::ungroup()
 
   # Ensure Timecol is treated as a column name
   Timecol <- rlang::ensym(Timecol)
 
+  ## ceck if TimeCol is numeric
+  TimeIsNumeric <- is.numeric(dataset[[rlang::as_string(Timecol)]])
+  assign_variable <- function(dataset){
+
+    if(TimeIsNumeric == F){
+      Variable = as.numeric(as.factor(dataset[[Timecol]]))
+    }
+
+    if(TimeIsNumeric == T){
+      Variable = dataset[[Timecol]]
+    }
+
+    return(Variable)
+  }
+
+  VariableGlobalData <- assign_variable(GlobalData)
+
   # Step 1: Fit a global spline model across all proteins
- global_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(dataset[[Timecol]])),
-                                                     knots = length(unique(dataset[[Timecol]])) - 1),
+  global_spline <- stats::lm(Intensity ~ splines::ns(VariableGlobalData,
+                                                     df = length(unique(dataset[[Timecol]])) - 1),
                              data = GlobalData)
 
   # Step 2: Predict confidence intervals for the global model
   global_preds <- stats::predict(global_spline, newdata = GlobalData, interval = "confidence", level = (1 - alpha))
   GlobalData <-  GlobalData %>% dplyr::mutate(global_fit = global_preds[, 1], global_lower = global_preds[, 2], global_upper = global_preds[, 3])
+
+
 
   # Calculate splines for every PoI
   SplineResults <- data.frame()
@@ -5024,13 +5035,16 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
     PoI <- PoIs[[i]]
     subset_data <- dplyr::filter(dataset %>% dplyr::ungroup(), Protein == PoI)
 
+    ## assign Time Variable to subset_data
+    Variable <- assign_variable(subset_data)
+
     if (split_status) {
-      protein_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(subset_data[[Timecol]])),
-                                                          knots = length(unique(subset_data[[Timecol]])) - 1) * Status,
+      protein_spline <- stats::lm(Intensity ~ splines::ns(Variable,
+                                                          df = df) * Status,
                                   data = subset_data)
     } else {
-      protein_spline <- stats::lm(Intensity ~ splines::ns(as.numeric(as.factor(subset_data[[Timecol]])),
-                                                          knots = length(unique(subset_data[[Timecol]])) - 1),
+      protein_spline <- stats::lm(Intensity ~ splines::ns(Variable,
+                                                          df = df),
                                   data = subset_data)
     }
 
@@ -5122,42 +5136,63 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
                      meanFit = mean(global_fit), .groups = "drop") %>%
     mutate(data = "Global")
 
+  Class <- class(dataset[[Timecol]])
+  class(PlotData[[Timecol]]) <- Class
+  class(GlobalPlotData[[Timecol]]) <- Class
+
   ## make one bit dataframe from plotdata and glabalplotdata
   PlotDataAll <- dplyr::bind_rows(PlotData, GlobalPlotData)
+
+  # Assign Plotting variables
+  ## assing variable to GLobalPlotData
+  VariableGlobalPlotData <- assign_variable(GlobalPlotData)
+  ## assing variable to PlotDataAll
+  VariablePlotDataAll <- assign_variable(PlotDataAll)
+  ## assign Variable to SplineResults
+  VariableSplineResults <- assign_variable(SplineResults)
+  ## assign Variable to PlotData
+  VariablePlotData <- assign_variable(PlotData)
+
 
   # Generate output plot
   colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)),palette = col_pellet)
 
-  ## generate output ploy
-
+  ## Initialize ggplot
   Plot <- ggplot2::ggplot(data = PlotDataAll) +
     ## plot global spline
-    ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), color = "black") +
+    ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = VariableGlobalPlotData, y = meanFit), color = "black") +
     ## plot CI of global spline
-    ggplot2::geom_ribbon(data = GlobalPlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5)
+    ggplot2::geom_ribbon(data = GlobalPlotData, ggplot2::aes(x = VariableGlobalPlotData, ymin = lower, ymax = upper), fill = "grey", alpha = 0.5)
 
 
   if (split_status == T) {
 
+    ## plot individual proteins
     if (show_all_proteins == T){
       ## plot Ribbons for all the proteins
       for(i in 1:length(PoIs)){
 
+        SingleProteinSplineData <- dataset %>% dplyr::filter(Protein == PoIs[i]) %>%
+          filter(!is.na(Intensity)) %>%
+          group_by(!!Timecol, Status) %>%
+          summarise(Intensity = mean(Intensity))
+
+        ## assign variabel to SingleProteinSplineData
+        VariableSingleProteinSplineData <- assign_variable(SingleProteinSplineData)
+
+
         Plot <- Plot +
-
-          ## plot CI of Protein splines
-          ggplot2::geom_line(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = fit ,col = Status), alpha = 0.2)
-
+          ## plot Protein splines
+          ggplot2::geom_line(data = SingleProteinSplineData, ggplot2::aes(x = VariableSingleProteinSplineData, y = Intensity, color = Status), alpha = 0.5)
       }
 
     }
 
-
     ## plot mean Protein splines for each status
     Plot <- Plot +
-      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit, color = Status), linewidth = 2) +
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = VariablePlotData, y = meanFit, color = Status), linewidth = 2) +
       ## plot CI of Protein splines for each status
-      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper, fill = Status), alpha = 0.5) +
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = VariablePlotData, ymin = lower, ymax = upper, fill = Status), alpha = 0.5) +
       ## Apply pre-defined colors
       ggplot2::scale_color_manual(values = colors) +
       ggplot2::scale_fill_manual(values = colors)
@@ -5167,14 +5202,22 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
   if (split_status == F) {
 
+    ## plot Individual Proteins
     if (show_all_proteins == T){
 
-      ## plot ribbons for every protein
+      ## plot line for every protein
       for(i in 1:length(PoIs)){
 
+        SingleProteinSplineData <- dataset %>% dplyr::filter(Protein == PoIs[i]) %>%
+          group_by(!!Timecol) %>%
+          summarise(Intensity = mean(Intensity))
+
+        ## assign variabel to SingleProteinSplineData
+        VariableSingleProteinSplineData <-assign_variable(SingleProteinSplineData)
+
         Plot <- Plot +
-          ## plot CI of Protein splines
-          ggplot2::geom_line(data = SplineResults %>% dplyr::filter(Protein == PoIs[i]), ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = fit),col = "grey", alpha = 0.5)
+          ## plot Protein splines
+          ggplot2::geom_line(data = SingleProteinSplineData, ggplot2::aes(x = VariableSingleProteinSplineData, y = Intensity),color = "grey", alpha = 0.5)
 
       }
 
@@ -5182,14 +5225,12 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
     ## plot mean Protein spline
     Plot <- Plot +
-      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), y = meanFit), linewidth = 2, color = "black") +
+      ggplot2::geom_line(data = PlotData, ggplot2::aes(x = VariablePlotData, y = meanFit), linewidth = 2, color = "black") +
       # plot CI for mean spline
-      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = as.numeric(as.factor(!!Timecol)), ymin = lower, ymax = upper), fill = "grey", alpha = 0.5) +
+      ggplot2::geom_ribbon(data = PlotData, ggplot2::aes(x = VariablePlotData, ymin = lower, ymax = upper), fill = "grey", alpha = 0.5) +
 
       ## Apply colors
       ggplot2::scale_fill_manual(values = colors)
-
-
   }
 
   Plot <- Plot +
@@ -5213,7 +5254,6 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
   return(Output)
 }
-
 
 
 ## add roxygen comments
