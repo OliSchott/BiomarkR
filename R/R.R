@@ -4821,7 +4821,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Blues"){
 
     for(Category in Categories){
 
-      PlotData <- EnrichmentResults %>% filter(category == Category) %>%
+      PlotData <- EnrichmentResults %>% dplyr::filter(category == Category) %>%
         dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
         dplyr::mutate(`Number of Genes` = number_of_genes)
 
