@@ -717,6 +717,8 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
         dplyr::select(contains("_")) %>% base::as.matrix() %>% base::t() %>%
         impute::impute.knn()
 
+      datasetQuant <- datasetQuant$data %>% base::t()
+
       datasetClin <- dataset %>%
         tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
         dplyr::select(!contains("_"))
@@ -780,6 +782,8 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
         tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
         dplyr::select(contains("_")) %>% base::as.matrix() %>% base::t() %>%
         impute::impute.knn()
+
+      datasetQuant <- datasetQuant$data %>% base::t()
 
       datasetClin <- dataset %>%
         tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
