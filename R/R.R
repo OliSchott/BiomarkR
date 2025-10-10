@@ -34,6 +34,7 @@
 #' @import clusterProfiler
 #' @import org.Hs.eg.db
 #' @import pathview
+#' @import impute
 
 ## Data Import and Management
 ## add roxygen comments
@@ -654,7 +655,7 @@ assign_colors <- function(labels, palette = "custom_vibrant") {
 #' @title ImputeFeatureIntensity
 #' @description This pipeline friendly function imputes missing values in the dataset
 #' @param dataset The dataset to be imputed
-#' @param method The method to be used for imputation (mean, zero, half_min, median)
+#' @param method The method to be used for imputation (mean, zero, half_min, median, knn)
 #' @return The imputed dataset
 #' @export
 ImputeFeatureIntensity <- function(dataset, method = "half_min"){
@@ -707,6 +708,23 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
         dplyr::select(-c("medianInt"))
 
     }
+
+    ## knn Imputation
+    if (method == "knn" | method == "KNN") {
+
+      datasetQuant <- dataset %>%
+        tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+        dplyr::select(contains("_")) %>% base::as.matrix() %>% base::t() %>%
+        impute::impute.knn()
+
+      datasetClin <- dataset %>%
+        tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+        dplyr::select(!contains("_"))
+
+      dataset <- base::cbind(datasetClin, datasetQuant) %>%
+        tidyr::pivot_longer(cols= contains("_"), names_to = "Protein", values_to = "Intensity")
+
+    }
   }
 
   if("Peptide" %in% base::colnames(dataset)){
@@ -752,6 +770,23 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
         dplyr::mutate(medianInt = base::median(Intensity, na.rm = TRUE)) %>%
         dplyr::mutate(Intensity = ifelse(base::is.na(Intensity), medianInt, Intensity)) %>%
         dplyr::select(-c("medianInt"))
+
+    }
+
+    ## knn Imputation
+    if (method == "knn" | method == "KNN") {
+
+      datasetQuant <- dataset %>%
+        tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+        dplyr::select(contains("_")) %>% base::as.matrix() %>% base::t() %>%
+        impute::impute.knn()
+
+      datasetClin <- dataset %>%
+        tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+        dplyr::select(!contains("_"))
+
+      dataset <- base::cbind(datasetClin, datasetQuant) %>%
+        tidyr::pivot_longer(cols= contains("_"), names_to = "Peptide", values_to = "Intensity")
 
     }
   }

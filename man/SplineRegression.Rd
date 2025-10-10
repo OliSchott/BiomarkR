@@ -13,7 +13,8 @@ SplineRegression(
   plotname = "",
   B = 100,
   col_pellet = "custom_vibrant",
-  show_all_proteins = T
+  show_all_proteins = T,
+  df = 3
 )
 }
 \arguments{

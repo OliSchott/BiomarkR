@@ -9,7 +9,7 @@ ImputeFeatureIntensity(dataset, method = "half_min")
 \arguments{
 \item{dataset}{The dataset to be imputed}
 
-\item{method}{The method to be used for imputation (mean, zero, half_min, median)}
+\item{method}{The method to be used for imputation (mean, zero, half_min, median, knn)}
 }
 \value{
 The imputed dataset
