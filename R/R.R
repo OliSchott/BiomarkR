@@ -5489,7 +5489,7 @@ MEGENA <- function(dataset, plotname = ""){
     as.matrix() %>% t()
 
   # Calculate the correlation matrix
-  cor_matrix <- MEGENA::calculate.correlation(TestData)
+  cor_matrix <- MEGENA::calculate.correlation(TestData, method = "spearman", is.signed = T)
 
   # Construct the PFN
   pfn <- MEGENA::calculate.PFN(cor_matrix)
@@ -5498,7 +5498,7 @@ MEGENA <- function(dataset, plotname = ""){
   g <- igraph::graph_from_data_frame(pfn, directed = FALSE)
 
   ## Calculate the modules
-  MEGENA.output <- MEGENA::do.MEGENA(g)
+  MEGENA.output <- MEGENA::do.MEGENA(g, min.size = 50 ,remove.unsig = TRUE)
 
   ## Summarize the modules
   summary.output <- MEGENA::MEGENA.ModuleSummary(MEGENA.output,
