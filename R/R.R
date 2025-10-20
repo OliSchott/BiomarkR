@@ -693,9 +693,13 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
     }
     if (method == "half_min" | method == "halfmin" | method == "HalfMin") {
       dataset <- dataset %>%
+        ## trasnsform to linear space
+        dplyr::mutate(Intensity = 2** Intensity) %>%
         dplyr::group_by(Protein) %>%
         dplyr::mutate(half_min = (base::min(Intensity, na.rm = TRUE) / 2)) %>%
         dplyr::mutate(Intensity = ifelse(base::is.na(Intensity), half_min, Intensity)) %>%
+        ## back to log2 space
+        dplyr::mutate(Intensity = log2(Intensity)) %>%
         dplyr::select(-c("half_min"))
 
     }
@@ -758,10 +762,13 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
       return(dataset)
     }
     if (method == "half_min" | method == "halfmin" | method == "HalfMin") {
-      dataset <- dataset %>%
+      ## trasnsform to linear space
+      dplyr::mutate(Intensity = 2** Intensity) %>%
         dplyr::group_by(Peptide) %>%
         dplyr::mutate(half_min = (base::min(Intensity, na.rm = TRUE) / 2)) %>%
         dplyr::mutate(Intensity = ifelse(base::is.na(Intensity), half_min, Intensity)) %>%
+        ## back to log2 space
+        dplyr::mutate(Intensity = log2(Intensity)) %>%
         dplyr::select(-c("half_min"))
 
     }
@@ -795,7 +802,7 @@ ImputeFeatureIntensity <- function(dataset, method = "half_min"){
     }
   }
 
-  return(base::invisible(dataset))
+  return(base::invisible(ungrpoup(dataset)))
 }
 
 ## Intensity normalization on Intensities grouped by Protein (default method ="median')
@@ -2900,7 +2907,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       ## making sure every column has entries
       BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
-      BiomarkR::ImputeFeatureIntensity(method = "halfmin") %>%
+      BiomarkR::ImputeFeatureIntensity(method = "knn") %>%
       ## Normalize on sample
       BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
@@ -2920,7 +2927,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       ## making sure every column has entries
       BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
-      BiomarkR::ImputeFeatureIntensity(method = "halfmin") %>%
+      BiomarkR::ImputeFeatureIntensity(method = "knn") %>%
       ## Normalize on sample
       BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
@@ -5212,9 +5219,9 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
       for(i in 1:length(PoIs)){
 
         SingleProteinSplineData <- dataset %>% dplyr::filter(Protein == PoIs[i]) %>%
-          filter(!is.na(Intensity)) %>%
-          group_by(!!Timecol, Status) %>%
-          summarise(Intensity = mean(Intensity))
+          dplyr::filter(!is.na(Intensity)) %>%
+          dplyr::group_by(!!Timecol, Status) %>%
+          dplyr::summarise(Intensity = mean(Intensity))
 
         ## assign variabel to SingleProteinSplineData
         VariableSingleProteinSplineData <- assign_variable(SingleProteinSplineData)
