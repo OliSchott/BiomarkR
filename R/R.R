@@ -3527,9 +3527,6 @@ EffectAnalysis <- function(dataset, plotname = ""){
     ggplot2::geom_text(ggplot2::aes(x = var1, y = var2, label = ifelse(p.adj < 0.05, "*", "")), size = 10) +
     ## add second star if p.adj < 0.01
     ggplot2::geom_text(ggplot2::aes(x = var1, y = var2, label = ifelse(p.adj < 0.01, "  *", "")), size = 10) +
-    ## add grid of cells
-    ggplot2::geom_vline(xintercept = seq(0.5, nrow(CorResults) + 0.5, 1), color = "white") +
-    ggplot2::geom_hline(yintercept = seq(0.5, nrow(CorResults) + 0.5, 1), color = "white") +
     ## rename axis
     ggplot2::xlab("PCs") +
     ggplot2::ylab("Variables") +
