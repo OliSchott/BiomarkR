@@ -802,7 +802,7 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
     }
   }
 
-  return(base::invisible(ungrpoup(dataset)))
+  return(base::invisible(dplyr::ungroup(dataset)))
 }
 
 ## Intensity normalization on Intensities grouped by Protein (default method ="median')
