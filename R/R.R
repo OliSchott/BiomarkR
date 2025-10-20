@@ -658,7 +658,7 @@ assign_colors <- function(labels, palette = "custom_vibrant") {
 #' @param method The method to be used for imputation (mean, zero, half_min, median, knn)
 #' @return The imputed dataset
 #' @export
-ImputeFeatureIntensity <- function(dataset, method = "half_min"){
+ImputeFeatureIntensity <- function(dataset, method = "knn"){
 
 
   MissingValue <- base::sum(base::is.na(dataset$Intensity))
