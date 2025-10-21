@@ -2106,7 +2106,6 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
   Output <- list()
   Output$raw <- kruskalResults
   Output$Significant <- KruskalSignificantFeatures
-  Output$Heatmap <- KurskalHeatMap
 
   return(Output)
 }
