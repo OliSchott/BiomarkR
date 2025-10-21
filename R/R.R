@@ -2100,39 +2100,6 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
       dplyr::arrange(p.adj)
 
   }
-  ## Making Heatmap of significant features
-  if("Protein" %in% colnames(dataset)){
-
-    ## supervised Heatmap
-    if(method %in% c("supervised", "Supervised")){
-
-      KurskalHeatMap <- HeatMap(dataset, PoIs = KruskalSignificantFeatures$Protein, plotname = plotname, method = "supervised", clustDist = clustDist, show_row_names = F)
-
-    }
-    ## unsupervised Heatmap
-    if(method %in% c("unsupervised", "Unsupervised")){
-
-      KurskalHeatMap <- HeatMap(dataset, PoIs = KruskalSignificantFeatures$Protein, plotname = plotname, method = "unsupervised", clustDist = clustDist, show_row_names = F)
-
-    }
-
-  }
-  if("Peptide" %in% colnames(dataset)){
-
-    ## supervised Heatmap
-    if(method %in% c("supervised", "Supervised")){
-
-      KurskalHeatMap <- HeatMap(dataset, PoIs = KruskalsignificantFeatures$Peptide, plotname = plotname, method = "supervised", clustDist = clustDist, show_row_names = F)
-
-    }
-    ## unsupervised Heatmap
-    if(method %in% c("unsupervised", "Unsupervised")){
-
-      KurskalHeatMap <- HeatMap(dataset, PoIs = KruskalsignificantFeatures$Peptide, plotname = plotname, method = "unsupervised", clustDist = clustDist, show_row_names = F)
-
-    }
-
-  }
 
 
   ##  Preparing Output object
