@@ -2099,8 +2099,6 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
       dplyr::filter(p.adj < 0.05) %>%
       dplyr::arrange(p.adj)
 
-    KruskalSignificantFeatures <- kruskalResults %>% dplyr::filter(p.adj < 0.05)
-
   }
   ## Making Heatmap of significant features
   if("Protein" %in% colnames(dataset)){
