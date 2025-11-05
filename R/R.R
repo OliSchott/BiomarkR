@@ -3660,7 +3660,7 @@ CorrelateFeatures <- function(dataset, vars1 , vars2, use = "Protein", clustdist
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n){
+BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = F, p.adj.method = "BH"){
 
   ## make every permutation of PoIs up to length n
   PoIs_permutations <- lapply(1:n, function(i) utils::combn(PoIs, i, simplify = FALSE))
@@ -3668,7 +3668,7 @@ BiomarkerPanel <- function(dataset, PoIs, n){
   ## how many entries are in PoIPermutarions
   nIterations <- sum(sapply(PoIs_permutations, length))
 
-  print(paste("Calculating AUC for ", nIterations, "combinations of PoIs"))
+  print(paste("Calculating AUC for", nIterations, "combinations of PoIs"))
 
   Combination_AUCs <- data.frame()
 
@@ -3679,20 +3679,27 @@ BiomarkerPanel <- function(dataset, PoIs, n){
 
     ## loop through every permutation
     for (i in seq_along(PoIs_permutations)) {
+
       ## get the current permutation
       current_permutation <- PoIs_permutations[[i]]
 
       ## loop through every combination in the current permutation
       for (j in seq_along(current_permutation)) {
+
         ## get the current combination
         current_combination <- current_permutation[[j]]
 
         ## model
         model <- BiomarkR::GLM(dataset, PoIs = current_combination, crossvalidation = T)
         AUC <- model$AUC
+        AUCSD <- model$model$results$ROCSD
+
+        # Compute z statistic
+        z <- (AUC - 0.5) / (AUCSD / sqrt(10))
+        p_value <- 1 - pnorm(z)  # one-sided test
 
         ## Put the AUC and combination in a data frame
-        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC)) %>%
+        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC, SD = AUCSD, p.value = p_value)) %>%
           arrange(-AUC)
 
       }
@@ -3733,13 +3740,17 @@ BiomarkerPanel <- function(dataset, PoIs, n){
 
   }
 
-  BestCombination <- Combination_AUCs %>% dplyr::filter(AUC == max(AUC)) %>% dplyr::pull(Combination)
+
+  ## sort Combination AUCs
+  Combination_AUCs <- Combination_AUCs %>%
+    rstatix::adjust_pvalue(method = p.adj.method) %>%
+    dplyr::arrange(p.value.adj)
+
+
+  BestCombination <- Combination_AUCs %>%  head(1) %>%  dplyr::pull(Combination)
 
   ## separate item in best combination
   BestCombination <- strsplit(BestCombination, ", ")[[1]]
-
-  ## sort Combination AUCs
-  Combination_AUCs <- Combination_AUCs %>% dplyr::arrange(-AUC)
 
   return(list(BestCombination = BestCombination, Combination_AUCs = Combination_AUCs))
 }
@@ -4385,7 +4396,7 @@ RandomForest <- function(dataset, PoIs) {
 
 
 
-## K-Nearest Neighbors
+## K-Nearest Neighbors Classification
 ## add roxygen comments
 #' @title KNN
 #' @description K-Nearest Neighbors calssification for the specified dataset.

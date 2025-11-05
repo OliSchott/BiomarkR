@@ -4,7 +4,7 @@
 \alias{BiomarkerPanel}
 \title{BiomarkerPanel}
 \usage{
-BiomarkerPanel(dataset, PoIs, n)
+BiomarkerPanel(dataset, PoIs, n, crossvalidation = F, p.adj.method = "BH")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
