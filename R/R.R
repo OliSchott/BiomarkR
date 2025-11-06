@@ -3657,10 +3657,12 @@ CorrelateFeatures <- function(dataset, vars1 , vars2, use = "Protein", clustdist
 #' @param dataset The dataset to be tested
 #' @param PoIs A vector containing the Proteins of interest
 #' @param n The maximum number of PoIs to be included in the Biomarker Panel
+#' @param crossvalidation Logical value indicating if crossvalidation should be used
+#' @param p.adj.method The method to be used for p-value adjustment
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = F, p.adj.method = "BH"){
+BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = T, p.adj.method = "BH"){
 
   ## make every permutation of PoIs up to length n
   PoIs_permutations <- lapply(1:n, function(i) utils::combn(PoIs, i, simplify = FALSE))

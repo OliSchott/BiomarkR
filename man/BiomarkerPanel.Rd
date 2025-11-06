@@ -4,7 +4,7 @@
 \alias{BiomarkerPanel}
 \title{BiomarkerPanel}
 \usage{
-BiomarkerPanel(dataset, PoIs, n, crossvalidation = F, p.adj.method = "BH")
+BiomarkerPanel(dataset, PoIs, n, crossvalidation = T, p.adj.method = "BH")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -12,6 +12,10 @@ BiomarkerPanel(dataset, PoIs, n, crossvalidation = F, p.adj.method = "BH")
 \item{PoIs}{A vector containing the Proteins of interest}
 
 \item{n}{The maximum number of PoIs to be included in the Biomarker Panel}
+
+\item{crossvalidation}{Logical value indicating if crossvalidation should be used}
+
+\item{p.adj.method}{The method to be used for p-value adjustment}
 }
 \value{
 A list object containing the results of the Biomarker Panel analysis
