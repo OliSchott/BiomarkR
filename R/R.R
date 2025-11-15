@@ -3662,7 +3662,7 @@ CorrelateFeatures <- function(dataset, vars1 , vars2, use = "Protein", clustdist
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = T, p.adj.method = "BH"){
+BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = T, p.adj.method = "bonferroni"){
 
   ## make every permutation of PoIs up to length n
   PoIs_permutations <- lapply(1:n, function(i) utils::combn(PoIs, i, simplify = FALSE))
@@ -4174,8 +4174,8 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   }
 
   ## train control
-  train_control <- caret::trainControl(method = ifelse(crossvalidation == T, "cv", "none"),
-                                       number = ifelse(crossvalidation == T, 10, NA) ,
+  train_control <- caret::trainControl(method = ifelse(crossvalidation == T, "boot632", "none"),
+                                       number = ifelse(crossvalidation == T, 100, NA) ,
                                        classProbs = TRUE, summaryFunction = caret::twoClassSummary,
                                        savePredictions = TRUE)
 
@@ -4218,7 +4218,12 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
 
     colnames(ci_band)[2:4] <- c("lower", "mean", "upper")
 
-    AUC_CI <- round(c(roc_curve$ci)[3],2)
+    ## get CI of prediction
+    min  <- roc_curve$ci[1]
+    mean <- roc_curve$ci[2]
+    max <- roc_curve$ci[3]
+
+    AUC_CI <- (abs(mean - min) + abs(mean - max))/2
 
   } else {
     # Use the non-CV predictions
@@ -4236,7 +4241,7 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   AUC <- base::round(pROC::auc(roc_curve), 2)
 
 
-  roc_coords <- coords(roc_curve, x = "all", ret = c("1-specificity", "sensitivity"))
+  roc_coords <- pROC::coords(roc_curve, x = "all", ret = c("1-specificity", "sensitivity"))
   roc_data <- data.frame(FPR = roc_coords$`1-specificity`, TPR = roc_coords$sensitivity)
 
   # Customizing aesthetics within ggroc
@@ -4244,14 +4249,14 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   roc_plot <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
     geom_path(color = "black", size = 1) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") + # Diagonal line
-    labs(x = "False Positive Rate", y = "True Positive Rate", title = paste("AUC:", round(auc(roc_curve), 2))) +
+    labs(x = "False Positive Rate", y = "True Positive Rate", title = paste("AUC:", round(pROC::auc(roc_curve), 2))) +
     theme_minimal()
 
   ## add shaded confidence interval if cross validation == TRUE
   if(crossvalidation == T){
     roc_plot <- roc_plot +
       ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1, inherit.aes = F)+
-      ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI - AUC, 2), "(95 % CI) ", "| 10 x cross validated"))
+      ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI, 2), "(95 % CI) ", "| 10 x cross validated"))
   }
 
 
