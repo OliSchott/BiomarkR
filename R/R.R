@@ -2207,7 +2207,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
     ROCData$Status <- ROCData$Status %>% as.factor()
 
     # Calculate ROC curve and AUC
-    ROC <- pROC::roc(data = ROCData, response = "Status", predictor = "Intensity")
+    ROC <- pROC::roc(data = ROCData, response = "Status", predictor = "Intensity", quiet = T)
 
     # Extract AUC value
     AUC <- ROC$auc
@@ -3646,6 +3646,96 @@ CorrelateFeatures <- function(dataset, vars1 , vars2, use = "Protein", clustdist
   return(Output)
 }
 
+## CorrelationNetwork
+## This function takes as input a dataset and calculates the correlation network between all Proteins
+## It returns an interactive network plot
+## add roxygen comments
+#' @title CorrelationNetwork
+#' @description Correlation network for the specified dataset.
+#' @param dataset The dataset to be tested
+#' @param cutoff The correlation cutoff to be used for the network (default is 0.7)
+#' @param cor.method The correlation method to be used (default is "pearson")
+#' @return An interactive network plot
+#' @export
+CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
+
+  ## Convert to wide matrix and impute
+  TestData <- dataset %>%
+    dplyr::select(Sample, Protein, Intensity) %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    tibble::column_to_rownames(var = "Sample") %>%
+    as.matrix() %>%
+    t()
+
+  ## check if there are NA values in dataset$Intensity (error if so)
+  if(any(is.na(TestData))){
+    stop("The dataset contains NA values in the Intensity column. Please impute or remove them.")
+  }
+
+  ## Calculate the correlation matrix (MEGENA)
+  cor_matrix <- MEGENA::calculate.correlation(
+    TestData,
+    method     = cor.method,
+    is.signed  = TRUE
+  )
+
+  ## check if cor_matrix is empty (give error if so)
+  if(nrow(cor_matrix) == 0){
+    stop("The correlation matrix is empty. Please check your data or adjust the cutoff value.")
+  }
+
+  ## Filter edges by correlation cutoff
+  edges <- cor_matrix %>%
+    dplyr::filter(abs(.data$rho) >= cutoff)
+
+  ## Build igraph graph
+  g <- igraph::graph_from_data_frame(edges, directed = FALSE)
+
+  ## Community detection
+  cl <- igraph::cluster_louvain(g, weights = edges$rho)
+  membership <- igraph::membership(cl)
+
+  ## Prepare nodes
+  nodes <- data.frame(
+    id    = names(membership),
+    label = names(membership),
+    group = as.factor(membership),
+    stringsAsFactors = FALSE
+  )
+
+  ## Prepare edges
+  edges_net <- data.frame(
+    from  = edges$row,
+    to    = edges$col,
+    value = edges$rho,
+    stringsAsFactors = FALSE
+  )
+
+  ## Compute layout coordinates (force-directed)
+  coords <- igraph::layout_with_fr(g, weights = edges$rho)
+  nodes$x <- coords[,1]
+  nodes$y <- coords[,2]
+
+  ## Build interactive network
+  Network <- visNetwork::visNetwork(nodes, edges_net) %>%
+    visNetwork::visPhysics(
+      solver = "forceAtlas2Based",
+      forceAtlas2Based = list(
+        gravitationalConstant = -50,
+        centralGravity = 0.01,
+        springLength = 100,
+        damping = 0.4,
+        avoidOverlap = 1,
+        stabilization = T
+      )
+    ) %>%
+    visNetwork::visOptions(
+      highlightNearest = TRUE,
+      nodesIdSelection = TRUE
+    )
+
+  return(Network)
+}
 
 ## BiomarkerPanel
 ## This function takes as input a dataset and a vector of Proteins of Interest
@@ -3657,104 +3747,139 @@ CorrelateFeatures <- function(dataset, vars1 , vars2, use = "Protein", clustdist
 #' @param dataset The dataset to be tested
 #' @param PoIs A vector containing the Proteins of interest
 #' @param n The maximum number of PoIs to be included in the Biomarker Panel
-#' @param crossvalidation Logical value indicating if crossvalidation should be used
-#' @param p.adj.method The method to be used for p-value adjustment
+#' @param FalseNegativeWeight The weight of false negatives in the ROC analysis (default is 1, recommended is 0.2 to 5)
+#' @param prevalence The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n, crossvalidation = T, p.adj.method = "bonferroni"){
+BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto") {
 
-  ## make every permutation of PoIs up to length n
-  PoIs_permutations <- lapply(1:n, function(i) utils::combn(PoIs, i, simplify = FALSE))
+  #------------------------------------------------------------
+  # 1. Generate all combinations of PoIs up to size n
+  #------------------------------------------------------------
+  PoIs_permutations <- unlist(
+    lapply(1:n, function(i) utils::combn(PoIs, i, simplify = FALSE)),
+    recursive = FALSE
+  )
 
-  ## how many entries are in PoIPermutarions
-  nIterations <- sum(sapply(PoIs_permutations, length))
+  nIterations <- length(PoIs_permutations)
+  message("Calculating AUC for ", nIterations, " combinations of PoIs")
 
-  print(paste("Calculating AUC for", nIterations, "combinations of PoIs"))
+  # Max size of any combination
+  max_len <- max(lengths(PoIs_permutations))
 
-  Combination_AUCs <- data.frame()
+  Combinations <- data.frame(
+    do.call(
+      rbind,
+      lapply(PoIs_permutations, function(x) {
+        c(x, rep(NA_character_, max_len - length(x)))
+      })
+    ),
+    stringsAsFactors = FALSE
+  )
 
-  ## add progress bar
-  pb <- utils::txtProgressBar(min = 0, max = length(PoIs_permutations), style = 3)
+  colnames(Combinations) <- paste0("Protein", seq_len(max_len))
 
-  if("Protein" %in% colnames(dataset)){
+  Combinations$AUC      <- NA_real_
+  Combinations$se       <- NA_real_
+  Combinations$p_value  <- NA_real_
+  Combinations$BestSen  <- NA_real_
+  Combinations$BestSpec <- NA_real_
 
-    ## loop through every permutation
-    for (i in seq_along(PoIs_permutations)) {
+  #------------------------------------------------------------
+  # 2. Progress bar
+  #------------------------------------------------------------
+  pb <- utils::txtProgressBar(min = 0, max = nIterations, style = 3)
 
-      ## get the current permutation
-      current_permutation <- PoIs_permutations[[i]]
 
-      ## loop through every combination in the current permutation
-      for (j in seq_along(current_permutation)) {
+  #------------------------------------------------------------
+  # 3. Function to compute AUC + CI for one combination
+  #------------------------------------------------------------
+  compute_auc_for_combo <- function(proteins) {
 
-        ## get the current combination
-        current_combination <- current_permutation[[j]]
+    ## make a characeter vecotr of proteins
+    proteins <- as.character(proteins)
+    proteins <- na.omit(proteins)
 
-        ## model
-        model <- BiomarkR::GLM(dataset, PoIs = current_combination, crossvalidation = T)
-        AUC <- model$AUC
-        AUCSD <- model$model$results$ROCSD
+    # Build formula: Status ~ Protein1 + Protein2 + ...
+    f <- reformulate(proteins, response = "Status")
 
-        # Compute z statistic
-        z <- (AUC - 0.5) / (AUCSD / sqrt(10))
-        p_value <- 1 - pnorm(z)  # one-sided test
+    # logistic regression
+    model <- glm(f, data = MLData, family = binomial())
 
-        ## Put the AUC and combination in a data frame
-        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC, SD = AUCSD, p.value = p_value)) %>%
-          arrange(-AUC)
+    # predict probabilities
+    pred <- predict(model, type = "response")
 
-      }
+    # compute ROC with CI
+    roc_obj <- pROC::roc(
+      response  = MLData$Status,
+      predictor = pred,
+      quiet = TRUE
+    )
 
-      ## update progress bar
-      utils::setTxtProgressBar(pb, i)
-
+    ## Check if prevalence == "auto"
+    if (prevalence == "auto") {
+      ## prepare data for youdens statitic
+      nCase <- length(roc_obj$cases)
+      nControl <- length(roc_obj$controls)
+      prevalence <- nCase / (nCase + nControl)
+    } else{
+      prevalence <- prevalence
     }
 
+    BestCoords <- pROBestCoords <- pROBestCoords <- pROC::coords(roc_obj, x = "best", best.weights = c(FalseNegativeWeight,prevalence))
+    BestSen <- BestCoords["sensitivity"][[1]] %>% as.numeric()
+    BestSpec <- BestCoords["specificity"][[1]] %>% as.numeric()
 
-  }
-  if("Peptide" %in% colnames(dataset)){
+    ## calculate ROC
+    AUC <- as.numeric(pROC::auc(roc_obj))
 
-    ## loop through every permutation
-    for (i in seq_along(PoIs_permutations)) {
-      ## get the current permutation
-      current_permutation <- PoIs_permutations[[i]]
+    ## calculate p-value using one side t test agains 0.5
+    # Extract DeLong SE
+    var_delong <- pROC::var(roc_obj)
+    se_delong <- sqrt(var_delong)
+    # Compute z statistic
+    z <- (AUC - 0.5) / se_delong
+    # compute p-value
+    p_value <- 1 - pnorm(z)
 
-      ## loop through every combination in the current permutation
-      for (j in seq_along(current_permutation)) {
-        ## get the current combination
-        current_combination <- current_permutation[[j]]
-
-        ## model
-        model <- BiomarkR::GLM(dataset, PoIs = current_combination, crossvalidation = T)
-
-        AUC <- model$AUC
-
-        ## Put the AUC and combination in a data frame
-        Combination_AUCs <- rbind(Combination_AUCs, data.frame(Combination = paste(current_combination, collapse = ", "), AUC = AUC))
-
-      }
-
-      ## update progress bar
-      utils::setTxtProgressBar(pb, i)
-
-    }
-
+    list(
+      auc = round(AUC, 2),
+      se  = round(se_delong, 4),
+      p.value = p_value,
+      BestSen = round(BestSen,2),
+      BestSpec = round(BestSpec,2)
+    )
   }
 
+  #------------------------------------------------------------
+  # 4. Main loop
+  #------------------------------------------------------------
+  MLData <- dataset %>% pivot_wider(names_from = Protein, values_from = Intensity)
+  MLData$Status <- as.factor(MLData$Status)
 
-  ## sort Combination AUCs
-  Combination_AUCs <- Combination_AUCs %>%
-    rstatix::adjust_pvalue(method = p.adj.method) %>%
-    dplyr::arrange(p.value.adj)
+  for (i in seq_len(nIterations)) {
 
+    res <- compute_auc_for_combo(Combinations[i, 1:max_len])
 
-  BestCombination <- Combination_AUCs %>%  head(1) %>%  dplyr::pull(Combination)
+    Combinations$AUC[i]     <- res$auc
+    Combinations$se[i]      <- res$se
+    Combinations$p_value[i] <- res$p.value
+    Combinations$BestSen[i] <- res$BestSen
+    Combinations$BestSpec[i] <- res$BestSpec
 
-  ## separate item in best combination
-  BestCombination <- strsplit(BestCombination, ", ")[[1]]
+    utils::setTxtProgressBar(pb, i)
+  }
 
-  return(list(BestCombination = BestCombination, Combination_AUCs = Combination_AUCs))
+  close(pb)
+
+  ## correct p_values
+  Combinations<- Combinations %>%
+    ungroup() %>%
+    rstatix::adjust_pvalue(method = "bonferroni", p.col = "p_value")
+
+  ## return results
+  return(Combinations)
 }
 
 ## Machine learning
@@ -4138,14 +4263,15 @@ SVM <- function(dataset, PoIs) {
 #' @param dataset The dataset to be tested
 #' @param PoIs A vector containing the Proteins of interest. Example: c(""Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
 #' @param crossvalidation A boolean value indicating whether to use cross-validation> I recommend false for desriptive analysese and true for predictife tasks
+#' @param FalseNegativeWeight The relative cost assigned to false negatives when calculating Youden's index (lower values will prioritize sensitivity, higher values will prioritize specificity). Recommended Values between 0.2 and 5
 #' @return A list object containing the results of the GLM model, the confusion matrix and the ROC plot and the AUC if the dataset has 2 classes
 #' @param plotname The name to be displayed on created plots
 #' @export
-GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
+GLM <- function(dataset, PoIs, plotname = "", FalseNegativeWeight = 1, prevalence = "auto") {
 
   ## Error message if more than 2 classes, stop execution
   if (length(base::unique(dataset$Status)) > 2) {
-    base::stop("Generalized Linear Model only works for two classes")
+    base::stop("GLM only works for two classes")
   }
 
   ## Generalized Linear Model using caret
@@ -4174,8 +4300,8 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   }
 
   ## train control
-  train_control <- caret::trainControl(method = ifelse(crossvalidation == T, "boot632", "none"),
-                                       number = ifelse(crossvalidation == T, 100, NA) ,
+  train_control <- caret::trainControl(method = "boot632",
+                                       number = 1000,
                                        classProbs = TRUE, summaryFunction = caret::twoClassSummary,
                                        savePredictions = TRUE)
 
@@ -4183,64 +4309,78 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
   glm_model <- caret::train(Status ~ ., data = MLData, method = "glm", trControl = train_control)
 
   ## Compute confusion matrix
-  if(crossvalidation == T){
-    Confusion_Matrix <- caret::confusionMatrix(glm_model)
-  } else {
-    predictions <- stats::predict(glm_model, MLData) # Predicted probabilities for the positive class
-    actuals <- factor(MLData$Status)
-    Confusion_Matrix <-caret::confusionMatrix(predictions, actuals)
-  }
 
 
+    Confusion_Matrix <- caret::confusionMatrix(glm_model, mode = "sens_spec")
 
   ## Use cross-validated predictions for ROC curve
-  if (crossvalidation == TRUE) {
+
     # Extract the cross-validated predictions
     crossval_preds <- glm_model$pred %>% data.frame()
 
-    # Make sure levels of predictions match the actual levels
-    crossval_preds$obs <- factor(crossval_preds$obs, levels = unique(MLData$Status))
+    ## Set levels
+    levels <- unique(MLData$Status)
 
+    # Make sure levels of predictions match the actual levels
+    crossval_preds$obs <- factor(crossval_preds$obs, levels = levels)
+
+    # Get predictor for the positive class
     predictor <- crossval_preds[[3]]
 
     # Generate ROC curve using cross-validated predictions
-    suppressMessages(suppressWarnings(
-      roc_curve <- pROC::roc(response = crossval_preds$obs,
-                             predictor = predictor, # Predicted probabilities for positive class
-                             ci = TRUE, boot.n = 100, conf.level = 0.95)
-    ))
+    roc_curve <- pROC::roc(response = crossval_preds$obs,
+                             predictor = predictor, quiet = TRUE)
+
+
+    ## prepare data for youdens statitic
+    ### check if prevalence is auto
+    if (prevalence == "auto") {
+      ## prepare data for youdens statitic
+      nCase <- length(roc_curve$cases)
+      nControl <- length(roc_curve$controls)
+      prevalence <- nCase / (nCase + nControl)
+    } else{
+      prevalence <- prevalence
+    }
+
+    ## perform youden's index calculation
+    BestCoords <- pROC::coords(roc_curve, x = "best", best.weights = c(FalseNegativeWeight,prevalence))
+    BestSen <- BestCoords["sensitivity"][[1]] %>% as.numeric()
+    BestSpec <- BestCoords["specificity"][[1]] %>% as.numeric()
+    BestThreshold <- BestCoords["threshold"][[1]] %>% as.numeric()
+
 
     # Calculate confidence intervals for specificities
-    ci_band <- pROC::ci.se(roc_curve, specificities = seq(0, 1, by = 0.01), boot.n = 100) %>%
+    ci_band <- pROC::ci.se(roc_curve, specificities = seq(0, 1, by = 0.01), boot.n = 100, conf.level=0.95) %>%
       data.frame() %>% rownames_to_column(var = "specificity")
 
     ci_band$specificity <- as.numeric(ci_band$specificity)
 
     colnames(ci_band)[2:4] <- c("lower", "mean", "upper")
 
+
+    ## Calculate CI of the AUC
+    CI <- pROC::ci.auc(roc_curve, boot.n = 1000, conf.level=0.95)
     ## get CI of prediction
-    min  <- roc_curve$ci[1]
-    mean <- roc_curve$ci[2]
-    max <- roc_curve$ci[3]
+    min  <- CI[1]
+    mean <- CI[2]
+    max <- CI[3]
 
     AUC_CI <- (abs(mean - min) + abs(mean - max))/2
-
-  } else {
-    # Use the non-CV predictions
-    probabilities <- stats::predict(glm_model, MLData, type = "prob")[, 2]  # Predicted probabilities for the positive class
-    actuals <- factor(MLData$Status)
-
-    suppressMessages(suppressWarnings(
-      roc_curve <- pROC::roc(response = actuals,
-                             predictor = probabilities)
-    ))
-  }
 
 
   ## plot ROC curve using ggplot
   AUC <- base::round(pROC::auc(roc_curve), 2)
 
+  ## make list that contains ROC information for output
+  ROC_Info <- list(roc_curve = roc_curve,
+                       AUC = AUC,
+                       AUC_CI = AUC_CI,
+                       BestSen = BestSen,
+                       BestSpec = BestSpec,
+                       BestThreshold = BestThreshold)
 
+  # Get coordinates for ROC curve
   roc_coords <- pROC::coords(roc_curve, x = "all", ret = c("1-specificity", "sensitivity"))
   roc_data <- data.frame(FPR = roc_coords$`1-specificity`, TPR = roc_coords$sensitivity)
 
@@ -4253,20 +4393,22 @@ GLM <- function(dataset, PoIs, crossvalidation = F, plotname = "") {
     theme_minimal()
 
   ## add shaded confidence interval if cross validation == TRUE
-  if(crossvalidation == T){
     roc_plot <- roc_plot +
       ggplot2::geom_ribbon(data = ci_band, aes(x = 1 - specificity, ymin = lower, ymax = upper), alpha = 0.2, linewidth = 1, inherit.aes = F)+
-      ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI, 2), "(95 % CI) ", "| 10 x cross validated"))
-  }
+      ggplot2::ggtitle(plotname, paste("AUC:", AUC, "±" , round(AUC_CI, 2), "(95 % CI) ", "| 1000 x Bootstrap"))
 
-
+    ## Add Point for best sensitivity and specificity
+    roc_plot <- roc_plot +
+      ggplot2::geom_point(aes(x = 1 - BestSpec, y = BestSen), color = "blue", size = 3) +
+      ggplot2::annotate("text", x = 1 - BestSpec, y = BestSen, label = paste0("(",round(1-BestSpec,2),"|", round(BestSen, 2),")"), vjust = -2, color = "blue")
 
 
   ## Create a list of all the output
   output <- base::list(Confusion_Matrix = Confusion_Matrix,
                        ROC_Plot = roc_plot,
                        AUC = c(AUC),
-                       model = glm_model)
+                       model = glm_model,
+                       ROC_Info = ROC_Info)
 
   return(output)
 }

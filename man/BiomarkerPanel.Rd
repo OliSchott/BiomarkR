@@ -4,7 +4,7 @@
 \alias{BiomarkerPanel}
 \title{BiomarkerPanel}
 \usage{
-BiomarkerPanel(dataset, PoIs, n, crossvalidation = T, p.adj.method = "BH")
+BiomarkerPanel(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -13,9 +13,9 @@ BiomarkerPanel(dataset, PoIs, n, crossvalidation = T, p.adj.method = "BH")
 
 \item{n}{The maximum number of PoIs to be included in the Biomarker Panel}
 
-\item{crossvalidation}{Logical value indicating if crossvalidation should be used}
+\item{FalseNegativeWeight}{The weight of false negatives in the ROC analysis (default is 1, recommended is 0.2 to 5)}
 
-\item{p.adj.method}{The method to be used for p-value adjustment}
+\item{prevalence}{The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")}
 }
 \value{
 A list object containing the results of the Biomarker Panel analysis
