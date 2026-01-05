@@ -1014,6 +1014,7 @@ normalizeIntensityOnSample <- function(dataset, method = "minmax", plot = FALSE)
   ## MinMax normalization
   if (method == "MinMax" | method == "minmax") {
     dataNorm <- dataset %>%
+      group_by(Sample) %>%
       ## calculating difference from the mean intensity
       mutate(meanInt = mean(Intensity, na.rm = TRUE)) %>%
       mutate(Intensity = Intensity - meanInt) %>%
@@ -4345,8 +4346,8 @@ GLM <- function(dataset, PoIs, plotname = "", FalseNegativeWeight = 1, prevalenc
 
     ## perform youden's index calculation
     BestCoords <- pROC::coords(roc_curve, x = "best", best.weights = c(FalseNegativeWeight,prevalence))
-    BestSen <- BestCoords["sensitivity"][[1]] %>% as.numeric()
-    BestSpec <- BestCoords["specificity"][[1]] %>% as.numeric()
+    BestSen <- BestCoords["sensitivity"][[1]] %>% as.numeric() %>% head(1)
+    BestSpec <- BestCoords["specificity"][[1]] %>% as.numeric() %>% head(1)
     BestThreshold <- BestCoords["threshold"][[1]] %>% as.numeric()
 
 
@@ -4399,7 +4400,7 @@ GLM <- function(dataset, PoIs, plotname = "", FalseNegativeWeight = 1, prevalenc
 
     ## Add Point for best sensitivity and specificity
     roc_plot <- roc_plot +
-      ggplot2::geom_point(aes(x = 1 - BestSpec, y = BestSen), color = "blue", size = 3) +
+      ggplot2::geom_point(aes(x = 1 - BestSpec, y = BestSen), color = "blue", size = 3, inherit.aes = F) +
       ggplot2::annotate("text", x = 1 - BestSpec, y = BestSen, label = paste0("(",round(1-BestSpec,2),"|", round(BestSen, 2),")"), vjust = -2, color = "blue")
 
 
