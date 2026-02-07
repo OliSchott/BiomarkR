@@ -3802,8 +3802,13 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
     proteins <- as.character(proteins)
     proteins <- na.omit(proteins)
 
-    # Build formula: Status ~ Protein1 + Protein2 + ...
-    f <- reformulate(proteins, response = "Status")
+    # Build formula: Status ~ Protein1 * Protein2 * ...
+    f <- as.formula(
+      paste0(
+        "Status ~ ",
+        paste0(proteins, collapse = " * ")
+      )
+    )
 
     # logistic regression
     model <- glm(f, data = MLData, family = binomial())
@@ -5161,7 +5166,7 @@ KeggEnrichmetn <- function(dataset, PoIs, folder = NA, plotname = ""){
 #' @param B The number of bootstrap samples to use for estimating confidence intervals
 #' @return A list object containing the results of the spline regression, the confidence intervals and the plot
 #' @export
-SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 100, col_pellet = "custom_vibrant", show_all_proteins = T, df = 3) {
+SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status = FALSE, plotname = "", B = 1000, col_pellet = "custom_vibrant", show_all_proteins = T, df = 3) {
 
   GlobalData <- dataset %>% dplyr::ungroup()
 
@@ -5326,6 +5331,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
   colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)),palette = col_pellet)
 
   ## Initialize ggplot
+  ## Global Spline
   Plot <- ggplot2::ggplot(data = PlotDataAll) +
     ## plot global spline
     ggplot2::geom_line(data = GlobalPlotData, ggplot2::aes(x = VariableGlobalPlotData, y = meanFit), color = "black") +
@@ -5401,6 +5407,8 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
       ggplot2::scale_fill_manual(values = colors)
   }
 
+
+  ## Finalize Plot
   Plot <- Plot +
     ggplot2::ggtitle(paste(plotname)) +
     ggplot2::theme_minimal() +
@@ -5627,11 +5635,11 @@ MEGENA <- function(dataset, plotname = ""){
   g <- igraph::graph_from_data_frame(pfn, directed = FALSE)
 
   ## Calculate the modules
-  MEGENA.output <- MEGENA::do.MEGENA(g, min.size = 50 ,remove.unsig = TRUE)
+  MEGENA.output <- MEGENA::do.MEGENA(g, min.size = 20 ,remove.unsig = TRUE)
 
   ## Summarize the modules
   summary.output <- MEGENA::MEGENA.ModuleSummary(MEGENA.output,
-                                                 min.size = 50, max.size = igraph::vcount(g)/2,
+                                                 min.size = 20, max.size = igraph::vcount(g)/2,
                                                  output.sig = TRUE)
 
   ## Extract module table
