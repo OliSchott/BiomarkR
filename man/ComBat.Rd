@@ -4,10 +4,12 @@
 \alias{ComBat}
 \title{ComBat}
 \usage{
-ComBat(dataset)
+ComBat(dataset, UseDiseaseCovariate = F)
 }
 \arguments{
 \item{dataset}{The dataset to be corrected}
+
+\item{UseDiseaseCovariate}{A boolean value indicating whether to use the disease status as a covariate in the ComBat correction}
 }
 \value{
 The corrected dataset

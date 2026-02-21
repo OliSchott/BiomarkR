@@ -1225,9 +1225,10 @@ RemoveOutliers <- function(dataset, Stdev = 2, plotname = "Outlier plot", plot =
 #' @title ComBat
 #' @description This function corrects batch effects using ComBat
 #' @param dataset The dataset to be corrected
+#' @param UseDiseaseCovariate A boolean value indicating whether to use the disease status as a covariate in the ComBat correction
 #' @return The corrected dataset
 #' @export
-ComBat <- function(dataset){
+ComBat <- function(dataset, UseDiseaseCovariate = F){
 
   ## Error if NA values in Intenisty
   if(base::sum(base::is.na(dataset$Intensity)) > 0){
@@ -1250,7 +1251,20 @@ ComBat <- function(dataset){
 
   PlateVector <- ComBatDataClin$Plate
 
-  CorrectedData <- sva::ComBat(dat = ComBatDataQaunt, batch = PlateVector, prior.plots = F, mean.only = T, par.prior = F) %>%
+  ## make mod if UseDiseaseCovariate is TRUE
+  if(UseDiseaseCovariate == T){
+    mod <- stats::model.matrix(~Status, data = ComBatDataClin)
+  } else {
+    mod <- NULL
+  }
+
+  CorrectedData <- sva::ComBat(dat = ComBatDataQaunt,
+                               batch = PlateVector,
+                               prior.plots = F,
+                               mean.only = T,
+                               par.prior = F,
+                               mod = mod) %>%
+    ## Data Wrangling
     base::t() %>%
     data.frame() %>%
     tibble::rownames_to_column(var = "Sample") %>%

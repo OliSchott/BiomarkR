@@ -11,7 +11,7 @@ SplineRegression(
   alpha = 0.05,
   split_status = FALSE,
   plotname = "",
-  B = 100,
+  B = 1000,
   col_pellet = "custom_vibrant",
   show_all_proteins = T,
   df = 3
