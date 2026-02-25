@@ -2342,6 +2342,9 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 #' @export
 ROC <- function(dataset, PoI, plotname = ""){
 
+  ## Give warning that this is deprecated and to use PredictGLM instead
+  warning("This function is deprecated and will be removed in future versions. Please use PredictGLM instead.")
+
   ## error of more than 2 classes
   if(length(unique(dataset$Status)) > 2){
     stop("ROC curve only works for two classes")
@@ -2386,6 +2389,104 @@ ROC <- function(dataset, PoI, plotname = ""){
   return(output)
 }
 
+## Predict GLM
+## add roxygen comments
+#' @title PredictGLM
+#' @description Predicts the GLM for a list of PoIs in the specified dataset
+#' @param dataset The dataset to be tested, It is recommended that Status is a factor with the controls as the first level
+#' @param PoIs A vector containing the Proteins of interest.
+#' @param Covariates A vector containing the covariates to be included in the model. Example: c("Age", "Sex")
+#' @param plotname The name to be displayed on created plots
+#' @return A list object containing the results of the GLM predictions and a plot including ROC curve and calibration plot
+#' @export
+PredictGLM <- function(dataset, PoIs, Covariates = NULL, plotname = ""){
+
+  ## error of more than 2 classes
+  if(length(unique(dataset$Status)) > 2){
+    stop("GLM only works for two classes")
+  }
+
+  ## predict in validation cohort
+  GLMData <- dataset %>%
+    dplyr::filter(Protein %in% c(PoIs)) %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    dplyr::mutate(Status = as.factor(Status)) %>%
+    ## make dummy variable
+    dplyr::mutate(DStatus = ifelse(Status == unique(Status)[1], 0, 1))
+
+  f <- stats::as.formula(base::paste("DStatus ~", base::paste(PoIs, collapse = " * "), if(!is.null(Covariates)) base::paste(" + ", base::paste(Covariates, collapse = " + ")), sep = ""))
+
+  ## calculage glm
+  model <- stats::glm(f, data = GLMData, family = binomial)
+
+  ## extract ROC
+  ROC<- pROC::roc(GLMData$Status, predict.glm(model, type = "response"), quiet = TRUE, se.fit = T)
+  Coordinates <- pROC::coords(ROC)
+  ## get AUC
+  AUC<- pROC::auc(ROC)
+  CI <- pROC::ci.auc(ROC)
+
+
+  ## rename columns
+  ROCData <- Coordinates %>%
+    dplyr::mutate(FPR = 1 - specificity,
+                  TPR = sensitivity) %>%
+    dplyr::select(FPR, TPR)
+
+  ## Make ROC Plot
+  ROCPlot <- ggplot(ROCData) +
+    geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", size = 1, linewidth = 2) +
+    theme_minimal()+
+    xlab("FRP")+
+    ylab("TPR") +
+    ## make font bigger
+    theme(text = element_text(size = 20)) +
+    ## add Title
+    ggtitle(plotname)
+
+  ## Calcualte Calibration Plot of the model
+  ## predicted probabilities
+  predicted_probabilities <- stats::predict(model, type = "response")
+
+  ## actual responses (use ModelData directly — safer)
+  actual_responses <- model$model$DStatus
+
+  ## Create a data frame for plotting
+  calibration_data <- data.frame(
+    predicted_probabilities = predicted_probabilities,
+    actual_responses = actual_responses)
+
+  ## create bins for plotting
+  calibration_data <- calibration_data %>%
+    dplyr::mutate(bin = cut(predicted_probabilities, breaks = seq(0, 1, by = 0.1), include.lowest = TRUE))
+
+  ## calculate mean predicted probability and observed frequency for each bin
+  calibration_summary <- calibration_data %>%
+    dplyr::group_by(bin) %>%
+    dplyr::summarise(mean_predicted = mean(predicted_probabilities),
+                     observed_frequency = mean(actual_responses),
+                     ## Get number of samples
+                     n =length(unique(GLMData$Sample)),
+                     ## Calculate Standard deviation
+                     SD = sd(actual_responses),
+                     ## Calculate Standard Error
+                     SE = SD/sqrt(n),
+                     ## calculate CI using t statistic
+                     CI = qt(0.975, df = n - 1) * SE)
+
+  ## plot calibration curve
+  CalibrationPlot <- ggplot(calibration_summary, aes(x = mean_predicted, y = observed_frequency)) +
+    geom_point() +
+    ## add error bars
+    geom_errorbar(aes(ymin = observed_frequency - CI, ymax = observed_frequency + CI), width = 0.02) +
+    ## add 1:1 line
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    ggtitle(plotname)
+
+  ## return list
+  return(list(ROCData = ROCData, AUC = AUC, CI = CI, model = model, ROCPlot = ROCPlot ,CalibrationPlot = CalibrationPlot))
+
+}
 
 ## Creating Boxplots of Any Protein from a vector containing Protein names
 ## add roxygen comments
@@ -3764,10 +3865,11 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
 #' @param n The maximum number of PoIs to be included in the Biomarker Panel
 #' @param FalseNegativeWeight The weight of false negatives in the ROC analysis (default is 1, recommended is 0.2 to 5)
 #' @param prevalence The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")
+#' @param Covariates A vector containing the names of covariates to be included in the logistic regression model (default is NULL)
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto") {
+BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto", Covariates = NULL) {
 
   #------------------------------------------------------------
   # 1. Generate all combinations of PoIs up to size n
@@ -3816,11 +3918,16 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
     proteins <- as.character(proteins)
     proteins <- na.omit(proteins)
 
-    # Build formula: Status ~ Protein1 * Protein2 * ...
+    # Build formula: Status ~ Protein1 * Protein2 * ... + Covariates
     f <- as.formula(
       paste0(
         "Status ~ ",
-        paste0(proteins, collapse = " * ")
+        paste0(proteins, collapse = " * "),
+        if (!is.null(Covariates)) {
+          paste0(" + ", paste0(Covariates, collapse = " + "))
+        } else {
+          ""
+        }
       )
     )
 
@@ -3901,6 +4008,7 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
   ## return results
   return(Combinations)
 }
+
 
 ## Machine learning
 

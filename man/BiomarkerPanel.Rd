@@ -4,7 +4,14 @@
 \alias{BiomarkerPanel}
 \title{BiomarkerPanel}
 \usage{
-BiomarkerPanel(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto")
+BiomarkerPanel(
+  dataset,
+  PoIs,
+  n,
+  FalseNegativeWeight = 1,
+  prevalence = "auto",
+  Covariates = NULL
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -16,6 +23,8 @@ BiomarkerPanel(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto")
 \item{FalseNegativeWeight}{The weight of false negatives in the ROC analysis (default is 1, recommended is 0.2 to 5)}
 
 \item{prevalence}{The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")}
+
+\item{Covariates}{A vector containing the names of covariates to be included in the logistic regression model (default is NULL)}
 }
 \value{
 A list object containing the results of the Biomarker Panel analysis
