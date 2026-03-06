@@ -717,8 +717,8 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
     if (method == "knn" | method == "KNN") {
 
       datasetQuant <- dataset %>%
-        tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-        dplyr::select(contains("_")) %>% base::as.matrix() %>% base::t() %>%
+        tidyr::pivot_wider(id_cols = "Sample",names_from = Protein, values_from = Intensity) %>%
+        dplyr::select(contains("_"), - Sample) %>% base::as.matrix() %>% base::t() %>%
         impute::impute.knn()
 
       datasetQuant <- datasetQuant$data %>% base::t()
@@ -1741,6 +1741,135 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
   return(Output)
 }
 
+
+## Logistic regression for differencial expression analysis
+## add roxygen comments
+#' @title LTest
+#' @description This function performs differential expression analysis using a logistic regression model.
+#' @param dataset The dataset to be tested
+#' @param plotname The name to be displayed on created plots
+#' @param Covariates A character vector of covariates to be included in the model. Example: c("Age","Sex")
+#' @return A list object containing the results of the logistic regression, the significant features and a volcano plot
+#' @export
+LTest <- function(dataset, plotname = "", Covariates = NULL){
+
+  ## error if Status is not binary
+  if(length(unique(dataset$Status)) != 2){
+    stop("Status variable must be binary")
+  }
+
+  ## check if dataset$Status is a factor
+  if(!is.factor(dataset$Status)){
+    dataset$Status <- as.factor(dataset$Status)
+    warning("Status variable is not a factor, converting to factor. It is recommended to manually convert Status to a factor and set the control level as the first level.")
+  }
+
+  Status1 <- dataset$Status %>% unique() %>% .[1] %>% as.character()
+  Status2 <- dataset$Status %>% unique() %>% .[2] %>% as.character()
+
+  f <- stats::as.formula(base::paste(
+    "DStatus ~", "Intensity",
+    if(!is.null(Covariates)){
+      base::paste("+", base::paste(Covariates, collapse = " + "))
+    }
+  ))
+
+  ## GLM for ALyme
+  GLMResults <- dataset %>%
+    dplyr::mutate(DStatus = ifelse(Status == Status1, 0,1)) %>%
+    dplyr::group_by(Protein) %>%
+    tidyr::nest() %>%
+    dplyr::mutate(
+      model = purrr::map(data, ~ stats::glm(formula = f, data = .x)),
+      stats = purrr::map(model, ~ broom::tidy(.x))
+    ) %>%
+    tidyr::unnest(stats) %>%
+    dplyr::filter(term == "Intensity") %>%
+    dplyr::ungroup() %>%
+    rstatix::adjust_pvalue(method = "BH") %>%
+    dplyr::select(-c(model, data))
+
+  Significant <- GLMResults %>%
+    dplyr::filter(p.value.adj < 0.05)
+
+  ## Calculate Fold Changes
+  FCData <- dataset %>%
+    dplyr::group_by(Status, Protein) %>%
+    dplyr::summarise(MeanInt = mean(Intensity, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = Status, values_from = MeanInt) %>%
+    dplyr::mutate(FC = !!rlang::sym(Status2) - !!rlang::sym(Status1)) %>%
+    dplyr::select(Protein, FC)
+
+  VulcanoPlotData <- GLMResults %>%
+    dplyr::left_join(FCData, by = "Protein")  %>%
+    dplyr::mutate(log10.p.value.adj = -log10(p.value.adj))
+
+  ## give a warning if there are infinite log10.p.value.adj
+  if(any(is.infinite(VulcanoPlotData$log10.p.value.adj))){
+    warning("There are infinite log10.p.value.adj values. These will be replaced with 1.5 times the maximum log10.p.value.adj that is not infinite.")
+  }
+
+  VulcanoPlotData <- VulcanoPlotData %>%
+    dplyr::mutate(
+      log10.p.value.adj = ifelse(
+        is.infinite(log10.p.value.adj),
+        max(log10.p.value.adj[!is.infinite(log10.p.value.adj)], na.rm = TRUE) * 1.5,
+        log10.p.value.adj
+      )
+    ) %>%
+    dplyr::mutate(
+      Direction = ifelse(
+        p.value.adj > 0.05,
+        "NotSignificant",
+        ifelse(estimate < 0, "Down", "Up")
+      )
+    ) %>%
+    dplyr::mutate(Gene = stringr::str_split_i(Protein, "_", 2))
+
+  ## Volcano plot
+  VulcanoPlot <- ggplot2::ggplot(data = VulcanoPlotData) +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VulcanoPlotData, Direction == "NotSignificant"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj)),
+      fill = "grey"
+    ) +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VulcanoPlotData, Direction == "Up"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj), fill = FC)
+    ) +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VulcanoPlotData, Direction == "Down"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj), fill = FC)
+    ) +
+    ggplot2::scale_fill_gradient2(
+      low = "blue", mid = "white", high = "red",
+      midpoint = 0, limits = c(-0.5, 2)
+    ) +
+    ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
+    ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
+    ggplot2::theme_light(base_size = 13) +
+    ggrepel::geom_text_repel(
+      data = subset(VulcanoPlotData, p.value.adj < 0.05 & (estimate > 0.2 | estimate < -0.2)),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj), label = Gene),
+      size = 4, max.overlaps = 10
+    ) +
+    ggplot2::labs(x = "AOR (log2)", y = "-log10(adjusted p-value)", fill = "Log2(FC)") +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "black", fill = NA, size = 1),
+      text = ggplot2::element_text(size = 20)
+    ) +
+    ggplot2::ggtitle(plotname)
+
+  return(list(
+    GLMResults = GLMResults,
+    VulcanoPlot = VulcanoPlot,
+    Significant = Significant
+  ))
+}
+
 ## Fisher Test
 ## add roxygen comments
 #' @title FisherTest
@@ -2126,57 +2255,6 @@ KruskalTest <- function(dataset, plotname= "", clustDist = "euclidean", method =
 }
 
 ## Uni variate feature analysis
-
-## Plots logistic regression of one feature
-## add roxygen comments
-#' @title LogisticRegressionSingleFeature
-#' @description Plots the logistic regression of a single feature.
-#' @param dataset The dataset to be tested
-#' @param PoI The feature of interest
-#' @return A plot object
-#' @export
-LogisticRegressionSingleFeature <- function(dataset, PoI){
-
-  if("Protein" %in% colnames(dataset)){
-
-    Status1 <- dataset$Status %>% unique()
-    Status1 <- Status1[1]
-
-    Status2 <- dataset$Status %>% unique()
-    Status2 <- Status2[2]
-
-    plotData <- dataset %>%
-      filter(Protein %in% PoI) %>%
-      ## setting up dummy variable
-      mutate(DStatus = ifelse(Status == Status1 , 1, 0))}
-
-  if("Peptide" %in% colnames(dataset)){
-
-    Status1 <- dataset$Status %>% unique()
-    Status1 <- Status1[1]
-
-    Status2 <- dataset$Status %>% unique()
-    Status2 <- Status2[2]
-
-    plotData <- dataset %>%
-      filter(Peptide %in% PoI) %>%
-      ## setting up dummy variable
-      mutate(DStatus = ifelse(Status == Status1 , 1, 0))}
-
-  # Plot the data points and logistic regression line
-
-  plot <- ggplot(plotData, aes(x = Intensity, y = DStatus)) +
-    geom_point(aes(col = Status)) +  # Raw data points
-    stat_smooth(method="glm", color="green", se=FALSE,
-                method.args = list(family=binomial)) +
-    labs(x = "Log2 Intensity", y = "Status") +
-    ggtitle(paste("Logistic Regression for", PoI))+
-    theme_light(base_size = 13)
-
-
-  return(plot)
-
-}
 
 ## Calculating the AUCs for a list of PoIs
 ## add roxygen comments
