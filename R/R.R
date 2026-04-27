@@ -5146,7 +5146,7 @@ kffs <- function(dataset, method = "SVM", kfolds = 10){
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the STRING analysis, the STRING network plot and the STRING enrichment plots
 #' @export
-STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Blues"){
+STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Reds"){
 
   ## Creating Input Dataframe
   Input <- data.frame(PoIs)
@@ -5166,11 +5166,11 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Blues"){
     dplyr::mutate(Gene = stringr::str_split_i(Protein, pattern = "_", 2)) %>%
     dplyr::select(Gene)
 
-  ## initilizing string object
-  string_db <- STRINGdb$new(version = "11.0", species = 9606, score_threshold = 400, input_directory = "")
+  ## initializing string object
+  string_db <- STRINGdb$new(species = 9606, score_threshold = 400, input_directory = "")
 
 
-  ## Map genes to theit Identifier
+  ## Map genes to their Identifier
   mapped_genes <- string_db$map(gene_df, "gene", removeUnmappedRows = TRUE)
 
   ## Creating Output Object
