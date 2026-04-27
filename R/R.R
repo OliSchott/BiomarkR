@@ -5195,7 +5195,7 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Reds"){
     for(Category in Categories){
 
       PlotData <- EnrichmentResults %>% dplyr::filter(category == Category) %>%
-        dplyr::arrange(p_value) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
+        dplyr::arrange(-GeneRatio) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
         dplyr::mutate(`Number of Genes` = number_of_genes)
 
       Plot <- ggplot2::ggplot((PlotData), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
