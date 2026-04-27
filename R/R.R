@@ -5194,9 +5194,11 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Reds"){
 
     for(Category in Categories){
 
-      PlotData <- EnrichmentResults %>% dplyr::filter(category == Category) %>%
+      PlotData <- EnrichmentResults %>% dplyr::filter(category == Category) %>% mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
         dplyr::arrange(-GeneRatio) %>% utils::head(10) %>% dplyr::select(category,number_of_genes, p_value, description) %>% dplyr::mutate(GeneRatio = number_of_genes / length(PoIs)) %>%
         dplyr::mutate(`Number of Genes` = number_of_genes)
+
+      MaxpVlaue <- max(-log10(PlotData$p_value))
 
       Plot <- ggplot2::ggplot((PlotData), aes(x = GeneRatio, y = reorder(description, `Number of Genes`),  size = `Number of Genes`))+
         geom_point(aes(col = -log10(p_value)))+
@@ -5205,7 +5207,8 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Reds"){
         xlab("Gene ratio")+
         ggtitle(paste(Category, "enrichment", plotname))+
         theme_light(base_size = 13)+
-        scale_color_distiller(palette = colPellet, direction = 1)
+        ## Set color, fix 0 to white
+        scale_color_distiller(palette = colPellet, direction = 1, limits = c(0, MaxpVlaue))
 
       ## put plot in Plots
       Plots[[Category]] <- Plot
