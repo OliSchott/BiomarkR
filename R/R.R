@@ -2240,7 +2240,7 @@ LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") 
   if (!is.null(subject_var)) {
 
     # Estimate within-subject correlation
-    corfit <- duplicateCorrelation(
+    corfit <- limma::duplicateCorrelation(
       expr_mat,
       design,
       block = meta[[subject_var]]
