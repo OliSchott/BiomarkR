@@ -2196,14 +2196,14 @@ ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsu
 #' @description This function performs differential expression analysis using the LIMMA package, which is designed
 #' for analyzing complex experiments. It uses linear models to assess differential expression while accounting for covariates and multiple testing, for example repeated measurements from the same person.
 #' @param dataset The dataset to be tested
-#' @param subject_var The name of the variable in the dataset that identifies the subjects
-#' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex", TimePoint). It is recommended to order the levels of time series data.
+#' @param Group_var The name of the variable in the dataset that indicates the grouping variable for repeated measures (e.g., patient ID, technical replicates, or other groupsing variables that lead to highly correlated measurements). If NULL, no correlation structure will be used and a standard linear model will be fitted.
+#' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex", Time Point). It is recommended to order the levels of time series data.
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the LIMMA analysis, the significant features and a volcano plot
 #' @export
 
 
-LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") {
+LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 
   # -----------------------------
   # 1. Expression matrix
@@ -2219,7 +2219,7 @@ LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") 
   # -----------------------------
   meta <- dataset %>%
     tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
-    dplyr::select(c(Sample, Status, covariates, subject_var)) %>%
+    dplyr::select(c(Sample, Status, covariates, Group_var)) %>%
     dplyr::distinct() %>%
     tibble::column_to_rownames("Sample")
 
@@ -2238,20 +2238,20 @@ LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") 
   # -----------------------------
   # 4–5. Fit model (with or without correlation)
   # -----------------------------
-  if (!is.null(subject_var)) {
+  if (!is.null(Group_var)) {
 
     # Estimate within-subject correlation
     corfit <- limma::duplicateCorrelation(
       expr_mat,
       design,
-      block = meta[[subject_var]]
+      block = meta[[Group_var]]
     )
 
     # Fit with correlation structure
     fit <- limma::lmFit(
       expr_mat,
       design,
-      block = meta[[subject_var]],
+      block = meta[[Group_var]],
       correlation = corfit$consensus
     )
 
@@ -2285,7 +2285,7 @@ LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") 
     rownames_to_column(var = "Protein")
 
 
-  VolcanoPlotData <- results %>%
+  VolcanoPlotData <- LimmaResults %>%
     dplyr::mutate(Direction = ifelse(p.value.adj > 0.05, "NotSignificant", ifelse(estimate < 0, "Down", "Up"))) %>% mutate(Gene = str_split_i(Protein,"_",2))
 
   ## Volcano plot of results
