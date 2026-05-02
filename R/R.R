@@ -2189,6 +2189,152 @@ ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsu
   return(Output)
 }
 
+## LIMMA
+## add roxygen comments
+#' @title LIMMA
+#' @description This function performs differential expression analysis using the LIMMA package, which is designed
+#' for analyzing complex experiments. It uses linear models to assess differential expression while accounting for covariates and multiple testing, for example repeated measurements from the same person.
+#' @param dataset The dataset to be tested
+#' @param subject_var The name of the variable in the dataset that identifies the subjects
+#' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex", TimePoint). It is recommended to order the levels of time series data.
+#' @param plotname The name to be displayed on created plots
+#' @return A list object containing the results of the LIMMA analysis, the significant features and a volcano plot
+#' @export
+
+
+LIMMA <- function(dataset,subject_var = NULL ,covariates = NULL, plotname = "") {
+
+  # -----------------------------
+  # 1. Expression matrix
+  # -----------------------------
+  expr_mat <- dataset %>%
+    dplyr::select(c(Protein, Sample, Intensity)) %>%
+    tidyr::pivot_wider(names_from = Sample, values_from = Intensity) %>%
+    tibble::column_to_rownames("Protein") %>%
+    base::as.matrix()
+
+  # -----------------------------
+  # 2. Metadata
+  # -----------------------------
+  meta <- dataset %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+    dplyr::select(c(Sample, Status, covariates, subject_var)) %>%
+    dplyr::distinct() %>%
+    tibble::column_to_rownames("Sample")
+
+  # Ensure matching order
+  meta <- meta[colnames(expr_mat), , drop = FALSE]
+
+  # -----------------------------
+  # 3. Build design formula
+  # -----------------------------
+  rhs_terms <- c("Status", covariates)
+  formula_str <- paste("~", paste(rhs_terms, collapse = " + "))
+  design_formula <- as.formula(formula_str)
+
+  design <- stats::model.matrix(design_formula, data = meta)
+
+  # -----------------------------
+  # 4–5. Fit model (with or without correlation)
+  # -----------------------------
+  if (!is.null(subject_var)) {
+
+    # Estimate within-subject correlation
+    corfit <- duplicateCorrelation(
+      expr_mat,
+      design,
+      block = meta[[subject_var]]
+    )
+
+    # Fit with correlation structure
+    fit <- limma::lmFit(
+      expr_mat,
+      design,
+      block = meta[[subject_var]],
+      correlation = corfit$consensus
+    )
+
+  } else {
+
+    # No repeated measures → standard limma fit
+    fit <- limma::lmFit(
+      expr_mat,
+      design
+    )
+  }
+
+  fit <- limma::eBayes(fit)
+
+  # -----------------------------
+  # 6. Extract results
+  # -----------------------------
+  # Handle factor coding safely
+  coef_name <- colnames(design)[grepl("Status", colnames(design))][1]
+
+  LimmaResults <- topTable(
+    fit,
+    coef = coef_name,
+    number = Inf,
+    adjust.method = "BH"
+  ) %>%
+    rename(
+      p.value.adj = adj.P.Val,
+      estimate = logFC
+    ) %>%
+    rownames_to_column(var = "Protein")
+
+
+  VolcanoPlotData <- results %>%
+    dplyr::mutate(Direction = ifelse(p.value.adj > 0.05, "NotSignificant", ifelse(estimate < 0, "Down", "Up"))) %>% mutate(Gene = str_split_i(Protein,"_",2))
+
+  ## Volcano plot of results
+  VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VolcanoPlotData, Direction == "NotSignificant"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj)),
+      fill = "grey") +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VolcanoPlotData, Direction == "Up"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj)),
+      fill = "red") +
+    ggplot2::geom_point(
+      size = 3.5, shape = 21,
+      data = subset(VolcanoPlotData, Direction == "Down"),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj)),
+      fill = "blue") +
+    ## use blue to red color scale for FC
+    ## make color scale from  -0.5 to 2
+    ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
+    ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
+    ggplot2::theme_light(base_size = 13) +
+    ggrepel::geom_text_repel(
+      dataset = subset(VolcanoPlotData, p.value.adj < 0.05 & (estimate > 0.5 | estimate < -0.19)),
+      ggplot2::aes(x = estimate, y = -log10(p.value.adj), label = Gene),
+      size = 4, max.overlaps = 5
+    ) +
+    ## rename x-axis
+    ggplot2::labs(x = "Log2 FC", y = "-log10(adjusted p-value)")+
+
+    ## draw border around plot
+    theme(panel.border = element_rect(color = "black", fill = NA, size = 1))+
+    ## add title
+    ggtitle(plotname)+
+    ## make font bigger
+    theme(text = element_text(size = 20))
+
+  Results <- list()
+
+  Results$results <- LimmaResults
+  Results$significant <- LimmaResults %>% filter(p.value.adj < 0.05)
+  Results$VolcanoPlot <- VolcanoPlot
+
+  return(Results)
+}
+
+
+
 ## Kruskal Test
 ## add roxygen comments
 #' @title KruskalTest
@@ -2828,217 +2974,6 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
   }
 
   return(HeatMapPlot)
-}
-
-## logistic regression for multiple features
-## add roxygen comments
-#' @title MultiLogisticRegression
-#' @description Calculates the logistic regression for multiple features in the specified dataset.
-#' @param dataset The dataset to be tested
-#' @param PoIs A vector containing the Proteins of interest. Example: c("Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD") or (unique(dataset$Protein))
-#' @param nIterations The number of iterations for the cross validation
-#' @return A list object containing the results of the logistic regression calculations and the ROC plot
-#' @export
-MultiLogisticRegression <- function(dataset, PoIs, nIterations = 10){
-  ## Preparing Data
-  Status1 <- unique(dataset$Status)[1]
-  Status2 <- unique(dataset$Status)[2]
-
-  Sensitivities <- data.frame()
-  Specificities <- data.frame()
-  ModelAUCs <- data.frame()
-
-  if("Protein" %in% colnames(dataset)){
-
-    MLData <- dataset %>%
-      ## filtering for PoIs
-      filter(Protein %in% PoIs) %>%
-      ## creating dummy status variable
-      mutate(DStatus = ifelse(Status == Status1, 1,0)) %>%
-      drop_na()
-
-
-
-    for(k in 1 : nIterations){
-      ## Select Training and validation data
-      ## Creating Training Data
-      ## Select 80 % of the Samples the Entries in both statuses
-      Data1 <- MLData %>%
-        filter(Status == Status1) %>%
-        group_by(Sample) %>%
-        summarise() %>%
-        sample_n(size = round(nrow(.)*0.8))
-
-      Data2 <- MLData %>%
-        filter(Status == Status2) %>%
-        group_by(Sample) %>%
-        summarise() %>%
-        sample_n(size = round(nrow(.)*0.8))
-
-      TrainingData <- MLData %>% filter(Sample %in% Data1$Sample | Sample %in% Data2$Sample)
-
-
-      ValData <- MLData %>%
-        anti_join(TrainingData, by = NULL)
-
-
-      ## calculating multiple logistic regression model
-      Model <- glm(DStatus ~ Protein:Intensity, data = TrainingData)
-
-      ## Predicting Outcome
-
-      Predictions <- predict(Model, newdata = ValData) %>%
-        data.frame() %>%
-        cbind(ValData)
-
-      colnames(Predictions)[1] <- "Pred"
-
-      ## defining ROC thersholds
-
-      ROC <- roc(data = Predictions, response = DStatus, predictor = Pred)
-
-      AUC <- ROC$auc
-
-      sensitivity <- ROC$sensitivities %>% data.frame()
-      specificity <- ROC$specificities %>% data.frame()
-
-      ## First iteration
-      if (k == 1){
-        Sensitivities <- sensitivity$. %>% data.frame()
-        Specificities <- specificity$. %>% data.frame()
-      }
-      ## Other iterations
-      if (k!= 1){
-        if(nrow(sensitivity) == nrow(Sensitivities)) {
-          Sensitivities <- Sensitivities %>% cbind(sensitivity)
-        }
-        if (nrow(sensitivity) != nrow(Sensitivities)){
-          k <- k-1
-          next
-        }
-        if(nrow(specificity) == nrow(Specificities)){
-          Specificities <- Specificities %>% cbind(specificity)
-        }
-
-      }
-
-      ModelAUCs[k,1] <- AUC
-    }
-
-
-
-  }
-  if("Peptide" %in% colnames(dataset)){
-
-    for(k in 1 : nIterations){
-      ## Select Training and validation data
-
-      MLData <- dataset %>%
-        ## filtering for PoIs
-        filter(Peptide %in% PoIs) %>%
-        ## creating dummy status variable
-        mutate(DStatus = ifelse(Status == Status1, 1,0))
-
-      ## Creating Training Data
-      ## Here we select 80 % on the Entires in both stati
-      Data1 <- MLData %>%
-        filter(Status == Status1) %>%
-        group_by(Sample) %>%
-        summarise() %>%
-        sample_n(size = round(nrow(.)*0.8))
-
-      Data2 <- MLData %>%
-        filter(Status == Status2) %>%
-        group_by(Sample) %>%
-        summarise() %>%
-        sample_n(size = round(nrow(.)*0.8))
-
-      TrainingData <- MLData %>% filter(Sample %in% Data1$Sample | Sample %in% Data2$Sample)
-
-
-      ValData <- MLData %>%
-        anti_join(TrainingData, by = NULL)
-
-
-      ## calculating multiple logistic regression model
-      Model <- glm(DStatus ~ Peptide:Intensity, data = TrainingData)
-
-      ## Predicting Outcome
-
-      Predictions <- predict(Model, newdata = ValData) %>%
-        data.frame() %>%
-        cbind(ValData)
-
-      colnames(Predictions)[1] <- "Pred"
-
-
-      ROC <- roc(data = Predictions, response = Status, predictor = Pred)
-
-      AUC <- ROC$auc
-
-      sensitivity <- ROC$sensitivities %>% data.frame()
-      specificity <- ROC$specificities %>% data.frame()
-
-      if (k == 1){
-
-        Sensitivities <- sensitivity$. %>% data.frame()
-        Specificities <- specificity$. %>% data.frame()
-      }
-      if (k!= 1){
-        if(nrow(sensitivity) == nrow(Sensitivities)) {
-          Sensitivities <- Sensitivities %>% cbind(sensitivity)
-        }
-        if (nrow(sensitivity) != nrow(Sensitivities)){
-          k <- k-1
-          next
-        }
-        if(nrow(specificity) == nrow(Specificities)){
-          Specificities <- Specificities %>% cbind(specificity)
-        }
-
-      }
-
-      ModelAUCs[k,1] <- AUC
-    }
-  }
-
-  ## Plotting a given model Results
-  ## Summarizing results of logistical regressions
-  ## Calculate mean AUC of the model
-  MeanAUC = colMeans(ModelAUCs, na.rm = TRUE) %>% round(digits = 3)
-
-
-  PloTPoIs <- PoIs %>% str_split_i(pattern = "_", 2)
-  Sensummary <- Sensitivities %>% t() %>% data.frame()
-  MeanSen <- colMeans(Sensummary, na.rm = TRUE)
-  minSen <- apply(Sensummary,2, min)
-  maxSen <- apply(Sensummary,2, max)
-  sdSen <- apply(Sensummary, 2, sd)
-  TValue <- qt(p = 0.05, df = nIterations-1)
-  CISen <- TValue*(sdSen/sqrt(nIterations))
-  Spesummary <- Specificities %>% t() %>% data.frame()
-  MeanSpe <- colMeans(Spesummary, na.rm = TRUE)
-
-  PlotData <- rbind(MeanSen,minSen,maxSen, MeanSpe, CISen) %>% data.frame() %>% t() %>% data.frame()
-
-
-  plot <- ggplot(data = PlotData)+
-    geom_ribbon(aes(x =1-MeanSpe, ymin = MeanSen - CISen, ymax = MeanSen + CISen), alpha = 0.5) +
-    geom_point(aes(x = 1-MeanSpe, y = MeanSen))+
-    geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed")+
-    ggtitle(paste("Multiple logistic regression; mean AUC = ", MeanAUC), paste("PoIs = ", paste(PloTPoIs, " ", collapse = ","), "   |   ", nIterations, "Iterations")) +
-    xlab("False positive rate") +
-    ylab("Sensitivity") +
-    xlim(0,1) +
-    ylim(0,1)+
-    theme_light(base_size = 13)
-
-
-  ## create output object
-  Output <- list()
-  Output$Results <- ModelAUCs
-  Output$ROCPlot <- plot
-
 }
 
 

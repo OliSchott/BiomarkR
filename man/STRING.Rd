@@ -4,7 +4,7 @@
 \alias{STRING}
 \title{STRING}
 \usage{
-STRING(PoIs, STRINGBackground, plotname = "", colPellet = "Blues")
+STRING(PoIs, STRINGBackground, plotname = "", colPellet = "Reds")
 }
 \arguments{
 \item{PoIs}{A vector containing the Proteins of interest. Example: c("Q8TF72_SHROOM3" , "Q9ULZ3_PYCARD")}
