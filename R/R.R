@@ -2272,21 +2272,22 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
   # Handle factor coding safely
   coef_name <- colnames(design)[grepl("Status", colnames(design))][1]
 
-  LimmaResults <- topTable(
+  LimmaResults <- limma::topTable(
     fit,
     coef = coef_name,
     number = Inf,
     adjust.method = "BH"
   ) %>%
-    rename(
+    dplyr::rename(
       p.value.adj = adj.P.Val,
       estimate = logFC
     ) %>%
-    rownames_to_column(var = "Protein")
+    tibble::rownames_to_column(var = "Protein")
 
 
   VolcanoPlotData <- LimmaResults %>%
-    dplyr::mutate(Direction = ifelse(p.value.adj > 0.05, "NotSignificant", ifelse(estimate < 0, "Down", "Up"))) %>% mutate(Gene = str_split_i(Protein,"_",2))
+    dplyr::mutate(Direction = ifelse(p.value.adj > 0.05, "NotSignificant", ifelse(estimate < 0, "Down", "Up"))) %>%
+    dplyr::mutate(Gene = stringr::str_split_i(Protein,"_",2))
 
   ## Volcano plot of results
   VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
@@ -2328,7 +2329,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
   Results <- list()
 
   Results$results <- LimmaResults
-  Results$significant <- LimmaResults %>% filter(p.value.adj < 0.05)
+  Results$significant <- LimmaResults %>% dplyr::filter(p.value.adj < 0.05)
   Results$VolcanoPlot <- VolcanoPlot
 
   return(Results)
