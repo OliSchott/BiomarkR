@@ -35,6 +35,7 @@
 #' @import org.Hs.eg.db
 #' @import pathview
 #' @import impute
+#' @import limma
 
 ## Data Import and Management
 ## add roxygen comments
