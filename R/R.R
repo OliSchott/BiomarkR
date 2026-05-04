@@ -36,6 +36,9 @@
 #' @import pathview
 #' @import impute
 #' @import limma
+#' @import plotly
+#' @import htmltools
+#' @import jsonlite
 
 ## Data Import and Management
 ## add roxygen comments
@@ -5866,3 +5869,206 @@ MEGENA <- function(dataset, plotname = ""){
 ## Data Manipulation
 ## Machine learning
 ## MISC
+
+## Visualisation Utilities
+
+#' @title InteractivePlotSelector
+#' @description Creates an interactive HTML widget with cascading dropdown
+#'   selectors for navigating a (possibly nested) list of ggplot or plotly
+#'   objects. Works in knitted HTML documents without a Shiny server.
+#' @param plot_list A named list of ggplot / plotly objects, or a named nested
+#'   list of such objects (arbitrary depth). Unnamed elements are labelled by
+#'   their integer position.
+#' @param labels Character vector of labels for each dropdown level.
+#'   Defaults to "Level 1", "Level 2", etc.
+#' @param height Height of the plot area as a CSS string (default "500px")
+#' @return An \code{htmltools::browsable} tag list suitable for direct output
+#'   in an R Markdown / Quarto HTML chunk.
+#' @export
+InteractivePlotSelector <- function(plot_list, labels = NULL, height = "500px") {
+
+  # --- internal helpers -------------------------------------------------------
+
+  is_leaf <- function(x) inherits(x, "gg") || inherits(x, "plotly")
+
+  # Recursively collect all (path, plot) pairs from a nested list
+  get_leaves <- function(lst, path = character(0)) {
+    if (is_leaf(lst)) {
+      return(list(list(path = path, plot = lst)))
+    } else if (is.list(lst)) {
+      nms <- names(lst)
+      if (is.null(nms)) nms <- as.character(seq_along(lst))
+      result <- list()
+      for (i in seq_along(lst)) {
+        result <- c(result, get_leaves(lst[[i]], c(path, nms[i])))
+      }
+      return(result)
+    }
+    list()
+  }
+
+  # Build a nested list where each path terminates in a plot-ID string
+  set_nested <- function(tree, path, value) {
+    if (length(path) == 1L) {
+      tree[[path[1]]] <- value
+    } else {
+      if (is.null(tree[[path[1]]])) tree[[path[1]]] <- list()
+      tree[[path[1]]] <- set_nested(tree[[path[1]]], path[-1], value)
+    }
+    tree
+  }
+
+  # --- unique namespace so multiple selectors on one page don't clash ---------
+  # (IDs, function names, and the data variable are all prefixed with ns)
+  ns <- paste0("ips_", paste(sample(c(letters, 0:9), 10, replace = TRUE), collapse = ""))
+
+  # --- build leaf table -------------------------------------------------------
+
+  leaves <- get_leaves(plot_list)
+  if (length(leaves) == 0L) stop("No ggplot or plotly objects found in plot_list.")
+
+  depth    <- max(vapply(leaves, function(x) length(x$path), integer(1)))
+  plot_ids <- paste0(ns, "_p", seq_along(leaves))
+
+  tree <- list()
+  for (i in seq_along(leaves)) {
+    tree <- set_nested(tree, leaves[[i]]$path, plot_ids[i])
+  }
+
+  # --- dropdown labels --------------------------------------------------------
+
+  if (is.null(labels)) labels <- paste("Level", seq_len(depth))
+  if (length(labels) < depth)
+    labels <- c(labels, paste("Level", seq(length(labels) + 1L, depth)))
+
+  # --- convert plots to plotly ------------------------------------------------
+
+  plotly_plots <- lapply(leaves, function(x) {
+    if (inherits(x$plot, "gg")) plotly::ggplotly(x$plot) else x$plot
+  })
+
+  # --- HTML: dropdowns --------------------------------------------------------
+
+  level1_keys <- names(tree)
+  fn_name     <- paste0(ns, "_update")   # global JS function name for onchange
+
+  dropdowns <- htmltools::tagList(lapply(seq_len(depth), function(lvl) {
+    htmltools::tags$div(
+      style = "display:inline-block; margin-right:20px; margin-bottom:15px;",
+      htmltools::tags$label(
+        labels[lvl],
+        style = "font-weight:bold; display:block; margin-bottom:4px;"
+      ),
+      htmltools::tags$select(
+        id       = paste0(ns, "_sel_", lvl),
+        onchange = paste0(fn_name, "(", lvl, ")"),
+        if (lvl == 1L) {
+          htmltools::tagList(
+            lapply(level1_keys, function(k) htmltools::tags$option(value = k, k))
+          )
+        } else {
+          htmltools::tags$option(value = "", "\u2014")   # populated by JS on init
+        }
+      )
+    )
+  }))
+
+  # --- HTML: plot area --------------------------------------------------------
+  # All plots are stacked with position:absolute so that every plotly widget
+  # is visible to the browser at initialisation time (display:none prevents
+  # plotly from computing sizes, causing blank plots on reveal).
+  # Switching plots changes visibility, not display.
+
+  plot_stack <- htmltools::tags$div(
+    style = paste0("position:relative; width:100%; height:", height, ";"),
+    htmltools::tagList(lapply(seq_along(plotly_plots), function(i) {
+      htmltools::tags$div(
+        id    = plot_ids[i],
+        style = paste0(
+          "position:absolute; top:0; left:0; width:100%; height:100%; ",
+          if (i == 1L) "visibility:visible;" else "visibility:hidden;"
+        ),
+        plotly_plots[[i]]
+      )
+    }))
+  )
+
+  # --- JavaScript -------------------------------------------------------------
+  # The script tag is placed *after* the DOM elements it references, so we
+  # can call the init directly — no DOMContentLoaded needed.
+
+  js_code <- sprintf(
+    '(function() {
+      var _tree  = %s;
+      var _depth = %d;
+      var _ids   = %s;
+      var _ns    = "%s";
+
+      function _getNode(path) {
+        var node = _tree;
+        for (var i = 0; i < path.length; i++) {
+          if (node == null || typeof node !== "object") return null;
+          node = node[path[i]];
+        }
+        return node;
+      }
+
+      function _showPlot(id) {
+        _ids.forEach(function(pid) {
+          var el = document.getElementById(pid);
+          if (el) el.style.visibility = "hidden";
+        });
+        var el = document.getElementById(id);
+        if (el) el.style.visibility = "visible";
+      }
+
+      // Exposed globally so the onchange attribute can call it
+      window["%s"] = function(changedLevel) {
+        // Collect path from dropdowns 1 .. changedLevel
+        var path = [];
+        for (var lvl = 1; lvl <= changedLevel; lvl++) {
+          var sel = document.getElementById(_ns + "_sel_" + lvl);
+          if (sel) path.push(sel.value);
+        }
+
+        // Cascade: repopulate downstream dropdowns and extend path
+        for (var lvl = changedLevel + 1; lvl <= _depth; lvl++) {
+          var parentNode = _getNode(path.slice(0, lvl - 1));
+          var sel = document.getElementById(_ns + "_sel_" + lvl);
+          if (!sel) continue;
+          sel.innerHTML = "";
+          if (parentNode && typeof parentNode === "object") {
+            var keys = Object.keys(parentNode);
+            keys.forEach(function(k) {
+              var opt = document.createElement("option");
+              opt.value = k; opt.text = k;
+              sel.appendChild(opt);
+            });
+            path.push(keys[0]);
+          }
+        }
+
+        var leaf = _getNode(path);
+        if (typeof leaf === "string") _showPlot(leaf);
+      };
+
+      // Run immediately — DOM is ready since this script follows the elements
+      window["%s"](1);
+    })();',
+    jsonlite::toJSON(tree, auto_unbox = TRUE),
+    depth,
+    jsonlite::toJSON(plot_ids),
+    ns,
+    fn_name,   # window[fn_name] assignment
+    fn_name    # initialisation call
+  )
+
+  htmltools::browsable(htmltools::tagList(
+    htmltools::tags$div(
+      style = "display:flex; flex-wrap:wrap; align-items:flex-end;",
+      dropdowns
+    ),
+    plot_stack,
+    htmltools::tags$script(htmltools::HTML(js_code))
+  ))
+}

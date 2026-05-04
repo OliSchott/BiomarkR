@@ -4,14 +4,14 @@
 \alias{LIMMA}
 \title{LIMMA}
 \usage{
-LIMMA(dataset, subject_var = NULL, covariates = NULL, plotname = "")
+LIMMA(dataset, covariates = NULL, Group_var = NULL, plotname = "")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
 
-\item{subject_var}{The name of the variable in the dataset that identifies the subjects}
+\item{covariates}{A character vector of covariates to be included in the model. Example: c("Age","Sex", Time Point). It is recommended to order the levels of time series data.}
 
-\item{covariates}{A character vector of covariates to be included in the model. Example: c("Age","Sex", TimePoint). It is recommended to order the levels of time series data.}
+\item{Group_var}{The name of the variable in the dataset that indicates the grouping variable for repeated measures (e.g., patient ID, technical replicates, or other groupsing variables that lead to highly correlated measurements). If NULL, no correlation structure will be used and a standard linear model will be fitted.}
 
 \item{plotname}{The name to be displayed on created plots}
 }
