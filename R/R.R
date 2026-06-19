@@ -1364,7 +1364,6 @@ ComBat <- function(dataset, UseDiseaseCovariate = F){
     tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
     ## Select Proteins
     dplyr::select(contains("_")) %>%
-    select(-Sample) %>%
     t() %>% as.matrix()
 
   ComBatDataClin <- dataset %>%
