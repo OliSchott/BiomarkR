@@ -40,7 +40,6 @@
 #' @import htmltools
 #' @import jsonlite
 #' @import glmnet
-#' @import lme4
 
 ## Data Import and Management
 ## add roxygen comments
@@ -661,7 +660,7 @@ assign_colors <- function(labels, palette = "custom_vibrant") {
 #' @title ImputeFeatureIntensity
 #' @description This pipeline friendly function imputes missing values in the dataset
 #' @param dataset The dataset to be imputed
-#' @param method The method to be used for imputation (mean, zero, half_min, median, knn)
+#' @param method The method to be used for imputation (mean, zero, half_min, median, knn, svd)
 #' @return The imputed dataset
 #' @export
 ImputeFeatureIntensity <- function(dataset, method = "knn"){
@@ -1158,7 +1157,68 @@ CompletenessAnalysis <- function(dataset){
   return(Output)
 }
 
-## Non-pipeline functions
+## RemoveOutliers2
+## Outlier Removal based on number of unique proteins per sample
+## add roxygen comments
+#' @title RemoveOutliers2
+#' @description This function removes outliers from the dataset based on the number of detected proteins
+#' @param dataset The dataset to be filtered
+#' @param StdDevs The number of standard deviations to be used for outlier removal
+#' @return A list containing the dataset without outliers, a plot and a table with the number of unique proteins per sample
+#' @export
+RemoveOutliers2 <- function(dataset, StdDevs = 3, plotname = "Outlier Plot"){
+
+  ## Calculate Number of unique proteins per sample
+  ProteinCounts <- dataset %>%
+    dplyr::filter(!is.na(Intensity)) %>%
+    dplyr::group_by(Sample) %>%
+    dplyr::summarise(ProteinCount = dplyr::n_distinct(Protein))
+
+  Median <- base::mean(ProteinCounts$ProteinCount)
+
+  ## Calculate SD of proteinCount
+  SD <- stats::sd(ProteinCounts$ProteinCount)
+
+  LowerBound <- round(Median - StdDevs* SD, 0)
+  UpperBound <- round(Median + StdDevs * SD, 0)
+
+  Outliers <- ProteinCounts %>%
+    dplyr::filter(ProteinCount < LowerBound | ProteinCount > UpperBound) %>%
+    dplyr::pull(Sample)
+
+  base::print(base::paste("The following samples were removed as outliers:", base::paste(Outliers, collapse = ", ")))
+
+  datasetWithoutOutliers <- dataset %>%
+    dplyr::filter(Sample %in% ProteinCounts$Sample[ProteinCounts$ProteinCount >= LowerBound | ProteinCounts$ProteinCount <= UpperBound])
+
+  ## Boxplot
+  Plot <- ggplot2::ggplot(ProteinCounts, aes(x = "",y = ProteinCount)) +
+    ggplot2::geom_boxplot(outliers = F) +
+    ggplot2::geom_jitter(width = 0.1) +
+    ggplot2::theme_minimal() +
+    ## Set title
+    ggplot2::ggtitle(plotname) +
+    ## draw line at 1250
+    ggplot2::geom_hline(yintercept = LowerBound, color = "red", linetype = "dashed") +
+    ## draw line at upp bound
+    ggplot2::geom_hline(yintercept = UpperBound, color = "red", linetype = "dashed") +
+    ## label lines on the y axis
+    ggplot2::annotate("text", x = 0.5, y = LowerBound, label = paste(LowerBound), color = "red", vjust = -0.5) +
+    ggplot2::annotate("text", x = 0.5, y = UpperBound, label = paste(UpperBound), color = "red", vjust = -0.5) +
+    ## make font bigger
+    ggplot2::theme(text = ggplot2::element_text(size = 20))+
+    ## but box around plot
+    ggplot2::theme(panel.border = ggplot2::element_rect(color = "black", fill = NA, size = 1)) +
+    ## remove x axis title
+    ggplot2::theme(axis.title.x = ggplot2::element_blank())
+
+  base::return(base::list(
+    datasetWithoutOutliers = datasetWithoutOutliers,
+    Plot = Plot,
+    ProteinCounts = ProteinCounts))
+}
+
+# Non-pipeline functions
 ## Outlier Removal (from Patrick`s markdown code)
 ## add roxygen comments
 #' @title RemoveOutliers
@@ -1281,7 +1341,8 @@ RemoveOutliers <- function(dataset, Stdev = 2, plotname = "Outlier plot", plot =
   return(Output)
 
 }
-}
+
+
 ## Batch correction using ComBat
 ## add roxygen comments
 #' @title ComBat
