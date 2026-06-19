@@ -2466,7 +2466,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param nCV The number of cross-validation folds to be used for selecting the optimal
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
-LASSO <- function(dataset, PoIs ,nCV = 10){
+LASSO <- function(dataset, PoIs ,nCV = 10, plotname = ""){
 
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
@@ -2512,7 +2512,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10){
   preds <- predict(cvfit, newx = X, s = "lambda.min", type = "response")
 
   # 2. Generate the ROC object
-  ROC <- roc(y, as.vector(preds))
+  ROC <- pROC::roc(y, as.vector(preds))
 
 
   # 1. Extract base coordinates
@@ -2539,6 +2539,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10){
       CI_Upper = curve_ci$Upper
     ) %>%
     dplyr::select(FPR, TPR, CI_Lower, CI_Upper)
+
   ## Make ROC Plot
   ROCPlot <- ggplot(ROCData) +
     geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", size = 1, linewidth = 2) +
@@ -2562,7 +2563,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10){
   # 2. Bin the data into 10 deciles and calculate observed percentages
   # 'y' needs to be a factor for caret's calibration function
   y_factor <- as.factor(y)
-  cal_data <- calibration(y_factor ~ preds, cuts = 10)$data
+  cal_data <- caret::calibration(y_factor ~ preds, cuts = 10)$data
 
   # 3. Plot using ggplot2
   CalibrationPlot <- ggplot(cal_data, aes(x = midpoint, y = 100 - Percent)) +
