@@ -2466,7 +2466,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param nCV The number of cross-validation folds to be used for selecting the optimal
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
-LASSO <- function(dataset, PoIs ,nCV = 3){
+LASSO <- function(dataset, PoIs ,nCV = 10){
 
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
@@ -2507,11 +2507,86 @@ LASSO <- function(dataset, PoIs ,nCV = 3){
   selected <- base::rownames(coef_df)[BiocGenerics::which(coef_df != 0)]
   selected <- selected[selected != "(Intercept)"]
 
+  ## Calculate ROC
+  # Use type = "response" to get probabilities between 0 and 1
+  preds <- predict(cvfit, newx = X, s = "lambda.min", type = "response")
+
+  # 2. Generate the ROC object
+  ROC <- roc(y, as.vector(preds))
+
+
+  # 1. Extract base coordinates
+  Coordinates <- pROC::coords(ROC)
+
+  # 2. Extract AUC and CI text
+  AUC <- pROC::auc(ROC)
+  CI  <- pROC::ci.auc(ROC)
+
+  # 3. Calculate CI using the EXACT specificities present in your Coordinates
+  # This prevents grid mismatch entirely
+  curve_ci <- pROC::ci.se(ROC, specificities = Coordinates$specificity) %>%
+    as.data.frame()
+
+  colnames(curve_ci) <- c("Lower", "Mean", "Upper")
+
+  # 4. Bind them directly together side-by-side
+  # Since we passed Coordinates$specificity directly to ci.se, they align perfectly row-by-row
+  ROCData <- Coordinates %>%
+    dplyr::mutate(
+      FPR = 1 - specificity,
+      TPR = sensitivity,
+      CI_Lower = curve_ci$Lower,
+      CI_Upper = curve_ci$Upper
+    ) %>%
+    dplyr::select(FPR, TPR, CI_Lower, CI_Upper)
+  ## Make ROC Plot
+  ROCPlot <- ggplot(ROCData) +
+    geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", size = 1, linewidth = 2) +
+    geom_ribbon(data = ROCData, aes(x = FPR, ymin = CI_Lower, ymax = CI_Upper), fill = "black", alpha = 0.2) +
+    theme_minimal()+
+    xlab("FRP")+
+    ylab("TPR") +
+    ## make font bigger
+    theme(text = element_text(size = 20)) +
+    ## add Title
+    ggtitle(plotname) +
+    ## add AUC and CI
+    annotate("text", x = 0.75, y = 0.25, label = paste0("AUC: ", round(AUC, 3), "\nCI: ", round(CI[1], 3), "-", round(CI[3], 3)), size = 5)
+
+
+  # Calibration Plot
+
+  # 1. Generate predicted probabilities
+  preds <- as.vector(stats::predict(cvfit, newx = X, s = "lambda.min", type = "response"))
+
+  # 2. Bin the data into 10 deciles and calculate observed percentages
+  # 'y' needs to be a factor for caret's calibration function
+  y_factor <- as.factor(y)
+  cal_data <- calibration(y_factor ~ preds, cuts = 10)$data
+
+  # 3. Plot using ggplot2
+  CalibrationPlot <- ggplot(cal_data, aes(x = midpoint, y = 100 - Percent)) +
+    geom_line(color = "blue", size = 1) +
+    geom_point(color = "blue", size = 3) +
+    geom_errorbar(aes(ymin = 100 - Lower, ymax = 100 - Upper), width = 0.02, color = "black") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") + # Perfect calibration line
+    labs(
+      title = "Lasso Model Calibration Plot",
+      x = "Predicted Probability (%)",
+      y = "Observed Proportion (%)"
+    ) +
+    xlim(0, 100) + ylim(0, 100) +
+    theme_minimal()
+
   base::return(base::list(
     model = model,
     best_lambda = best_lambda,
-    cv_auc = cv_auc,
-    selected_proteins = selected
+    AUC = AUC,
+    CI = CI,
+    selected_proteins = selected,
+    CalibrationPlot = CalibrationPlot,
+    ROCPlot = ROCPlot,
+    coefs = coef_df
   ))
 }
 
@@ -2825,28 +2900,45 @@ PredictGLM <- function(dataset, PoIs, Covariates = NULL, plotname = ""){
 
   ## extract ROC
   ROC<- pROC::roc(GLMData$Status, predict.glm(model, type = "response"), quiet = TRUE, se.fit = T)
+  # 1. Extract base coordinates
+  # 1. Extract base coordinates
   Coordinates <- pROC::coords(ROC)
-  ## get AUC
-  AUC<- pROC::auc(ROC)
-  CI <- pROC::ci.auc(ROC)
 
+  # 2. Extract AUC and CI text
+  AUC <- pROC::auc(ROC)
+  CI  <- pROC::ci.auc(ROC)
 
-  ## rename columns
+  # 3. Calculate CI using the EXACT specificities present in your Coordinates
+  # This prevents grid mismatch entirely
+  curve_ci <- pROC::ci.se(ROC, specificities = Coordinates$specificity) %>%
+    as.data.frame()
+
+  colnames(curve_ci) <- c("Lower", "Mean", "Upper")
+
+  # 4. Bind them directly together side-by-side
+  # Since we passed Coordinates$specificity directly to ci.se, they align perfectly row-by-row
   ROCData <- Coordinates %>%
-    dplyr::mutate(FPR = 1 - specificity,
-                  TPR = sensitivity) %>%
-    dplyr::select(FPR, TPR)
-
+    dplyr::mutate(
+      FPR = 1 - specificity,
+      TPR = sensitivity,
+      CI_Lower = curve_ci$Lower,
+      CI_Upper = curve_ci$Upper
+    ) %>%
+    dplyr::select(FPR, TPR, CI_Lower, CI_Upper)
   ## Make ROC Plot
   ROCPlot <- ggplot(ROCData) +
     geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", size = 1, linewidth = 2) +
+    geom_ribbon(data = ROCData, aes(x = FPR, ymin = CI_Lower, ymax = CI_Upper), fill = "black", alpha = 0.2) +
     theme_minimal()+
     xlab("FRP")+
     ylab("TPR") +
     ## make font bigger
     theme(text = element_text(size = 20)) +
     ## add Title
-    ggtitle(plotname)
+    ggtitle(plotname) +
+    ## add AUC and CI
+    annotate("text", x = 0.75, y = 0.25, label = paste0("AUC: ", round(AUC, 3), "\nCI: ", round(CI[1], 3), "-", round(CI[3], 3)), size = 5)
+
 
   ## Calcualte Calibration Plot of the model
   ## predicted probabilities
