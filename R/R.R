@@ -40,6 +40,7 @@
 #' @import htmltools
 #' @import jsonlite
 #' @import glmnet
+#' @import BiocGenerics
 
 ## Data Import and Management
 ## add roxygen comments
@@ -2503,7 +2504,7 @@ LASSO <- function(dataset, PoIs ,nCV = 3){
 
   ## extract PoIs
   coef_df <- stats::coef(cvfit, s = "lambda.1se")
-  selected <- base::rownames(coef_df)[which(coef_df != 0)]
+  selected <- base::rownames(coef_df)[BiocGenerics::which(coef_df != 0)]
   selected <- selected[selected != "(Intercept)"]
 
   base::return(base::list(

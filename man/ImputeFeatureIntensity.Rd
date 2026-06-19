@@ -9,7 +9,7 @@ ImputeFeatureIntensity(dataset, method = "knn")
 \arguments{
 \item{dataset}{The dataset to be imputed}
 
-\item{method}{The method to be used for imputation (mean, zero, half_min, median, knn)}
+\item{method}{The method to be used for imputation (mean, zero, half_min, median, knn, svd)}
 }
 \value{
 The imputed dataset
