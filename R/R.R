@@ -39,6 +39,8 @@
 #' @import plotly
 #' @import htmltools
 #' @import jsonlite
+#' @import glmnet
+#' @import lme4
 
 ## Data Import and Management
 ## add roxygen comments
@@ -698,10 +700,10 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
     if (method == "half_min" | method == "halfmin" | method == "HalfMin") {
       dataset <- dataset %>%
         ## trasnsform to linear space
-        dplyr::mutate(Intensity = 2** Intensity) %>%
         dplyr::group_by(Protein) %>%
-        dplyr::mutate(half_min = (base::min(Intensity, na.rm = TRUE) / 2)) %>%
+        dplyr::mutate(half_min = (base::min(Intensity, na.rm = TRUE) -1)) %>%
         dplyr::mutate(Intensity = ifelse(base::is.na(Intensity), half_min, Intensity)) %>%
+        dplyr::ungroup() %>%
         ## back to log2 space
         dplyr::mutate(Intensity = log2(Intensity)) %>%
         dplyr::select(-c("half_min"))
@@ -733,6 +735,35 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
 
       dataset <- base::cbind(datasetClin, datasetQuant) %>%
         tidyr::pivot_longer(cols= contains("_"), names_to = "Protein", values_to = "Intensity")
+
+    }
+
+    if(method == "svd" | method == "SVD"){
+
+      datasetQuant <- dataset %>%
+        dplyr::mutate(Intensity = as.numeric(Intensity)) %>%
+        tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+        dplyr::select(Sample, contains("_")) %>%
+        tibble::column_to_rownames("Sample") %>%
+        base::as.matrix()
+
+      datasetClin <- dataset %>%
+        tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+        dplyr::select(!contains("_"))
+
+      dataset <- base::cbind(datasetClin, datasetQuant) %>%
+        tidyr::pivot_longer(cols= contains("_"), names_to = "Protein", values_to = "Intensity")
+
+      PCA <- pcaMethods::pca(datasetQuant, method = "svdImpute", nPcs = 3)
+
+
+      ImputedData <- PCA@completeObs %>%
+        base::as.data.frame() %>%
+        tibble::rownames_to_column("Sample") %>%
+        tidyr::pivot_longer(cols = -Sample, names_to = "Protein", values_to = "Intensity") %>%
+        dplyr::left_join(datasetClin, by = "Sample")
+
+      dataset <- ImputedData
 
     }
   }
@@ -804,7 +835,34 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
         tidyr::pivot_longer(cols= contains("_"), names_to = "Peptide", values_to = "Intensity")
 
     }
+
+    ## SVD Imputation
+    if(method == "svd" | method == "SVD"){
+      datasetQuant <- dataset %>%
+        dplyr::mutate(Intensity = as.numeric(Intensity)) %>%
+        tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+        dplyr::select(Sample, contains("_")) %>%
+        tibble::column_to_rownames("Sample") %>%
+        base::as.matrix()
+
+      datasetClin <- dataset %>%
+        tidyr::pivot_wider(names_from = Peptide, values_from = Intensity) %>%
+        dplyr::select(!contains("_"))
+
+      dataset <- base::cbind(datasetClin, datasetQuant) %>%
+        tidyr::pivot_longer(cols= contains("_"), names_to = "Peptide", values_to = "Intensity")
+
+      PCA <- pcaMethods::pca(datasetQuant, method = "svdImpute", nPcs = 3)
+
+      ImputedData <- PCA@completeObs %>%
+        base::as.data.frame() %>%
+        tibble::rownames_to_column("Sample") %>%
+        tidyr::pivot_longer(cols = -Sample, names_to = "Peptide", values_to = "Intensity") %>%
+        dplyr::left_join(datasetClin, by = "Sample")
+
+      dataset <- ImputedData
   }
+}
 
   return(base::invisible(dplyr::ungroup(dataset)))
 }
@@ -1223,7 +1281,7 @@ RemoveOutliers <- function(dataset, Stdev = 2, plotname = "Outlier plot", plot =
   return(Output)
 
 }
-
+}
 ## Batch correction using ComBat
 ## add roxygen comments
 #' @title ComBat
@@ -1245,6 +1303,7 @@ ComBat <- function(dataset, UseDiseaseCovariate = F){
     tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
     ## Select Proteins
     dplyr::select(contains("_")) %>%
+    select(-Sample) %>%
     t() %>% as.matrix()
 
   ComBatDataClin <- dataset %>%
@@ -1850,7 +1909,7 @@ LTest <- function(dataset, plotname = "", Covariates = NULL){
     ) +
     ggplot2::scale_fill_gradient2(
       low = "blue", mid = "white", high = "red",
-      midpoint = 0, limits = c(-0.5, 2)
+      midpoint = 0
     ) +
     ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
     ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
@@ -2204,8 +2263,6 @@ ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsu
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the LIMMA analysis, the significant features and a volcano plot
 #' @export
-
-
 LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 
   # -----------------------------
@@ -2338,7 +2395,64 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
   return(Results)
 }
 
+## Lasso regression
+## add roxygen comments
+#' @title LASSO
+#' @description Perform LASSO regression to identify a subset of proteins that are most predictive of the outcome variable (Status). LASSO is a regularization technique that can help prevent overfitting and improve model interpretability by shrinking some coefficients to zero, effectively performing feature selection.
+#' @param dataset The dataset to be tested
+#' @param PoIs A character vector of proteins of interest to be included in the L
+#' ASSO model. Example: c("Protein1", "Protein2", "Protein3"). It is recommended to select proteins that are biologically relevant or have shown some association with the outcome variable in previous analyses.
+#' @param nCV The number of cross-validation folds to be used for selecting the optimal
+#' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
+#' @export
+LASSO <- function(dataset, PoIs ,nCV = 3){
 
+  GLMData <- dataset %>%
+    dplyr::filter(Protein %in% PoIs) %>%
+    tidyr::pivot_wider(id_cols = c(Sample, Status),names_from = Protein, values_from = Intensity) %>%
+    tidyr::pivot_longer(cols = contains("_"), names_to = "Protein", values_to = "Intensity")
+
+  ## error if missing values in Intensity
+  if (any(is.na(GLMData$Intensity))) {
+    stop("Error: Missing values in Intensity column. Please impute or remove missing values before running LASSO.")
+  }
+
+  GLMData <- GLMData %>%
+    dplyr::select(Sample, Protein, Intensity, Status) %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity)
+
+
+  X <- base::as.matrix(GLMData %>% dplyr::select(-Sample, -Status))
+  y <- GLMData$Status
+
+  base::set.seed(123)
+
+  cvfit <- glmnet::cv.glmnet(
+    X, y,
+    family = "binomial",      # logistic regression
+    type.measure = "auc",     # choose lambda by AUC
+    nfolds = nCV               # cross validation
+  )
+
+  # Plot CV performance
+  model <- cvfit
+
+  ## extract Lamda and AUC
+  best_lambda <- cvfit$lambda.1se
+  cv_auc <- base::max(cvfit$cvm)
+
+  ## extract PoIs
+  coef_df <- stats::coef(cvfit, s = "lambda.1se")
+  selected <- base::rownames(coef_df)[which(coef_df != 0)]
+  selected <- selected[selected != "(Intercept)"]
+
+  base::return(base::list(
+    model = model,
+    best_lambda = best_lambda,
+    cv_auc = cv_auc,
+    selected_proteins = selected
+  ))
+}
 
 ## Kruskal Test
 ## add roxygen comments
