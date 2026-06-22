@@ -2464,9 +2464,10 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param PoIs A character vector of proteins of interest to be included in the L
 #' ASSO model. Example: c("Protein1", "Protein2", "Protein3"). It is recommended to select proteins that are biologically relevant or have shown some association with the outcome variable in previous analyses.
 #' @param nCV The number of cross-validation folds to be used for selecting the optimal
+#' @param standardize A logical value indicating whether to standardize the features before fitting the model. Default is TRUE, which is recommended for LASSO regression to ensure that all features are on the same scale.
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
-LASSO <- function(dataset, PoIs ,nCV = 10, plotname = ""){
+LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T){
 
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
@@ -2492,7 +2493,9 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = ""){
     X, y,
     family = "binomial",      # logistic regression
     type.measure = "auc",     # choose lambda by AUC
-    nfolds = nCV               # cross validation
+    nfolds = nCV,# cross validation
+    alpha = 1,
+    standardize = standardize     # standardize features
   )
 
   # Plot CV performance
@@ -3274,15 +3277,14 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
       BiomarkR::ImputeFeatureIntensity(method = "knn") %>%
-      ## Normalize on sample
-      BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
       dplyr::select("Protein", "Intensity", "Status", "Sample") %>%
       ## pivoting wider
-      tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity")
+      tidyr::pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
+      ungroup()
 
     ## Calculating PCA
-    PCA <- pcaMethods::pca(select(PCAData, contains("_")), nPcs = 3)
+    PCA <- pcaMethods::pca(dplyr::select(PCAData, contains("_")), nPcs = 3)
 
 
   }
@@ -3294,15 +3296,13 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
       BiomarkR::NaCutoff(0.1) %>%
       ## imputing missing values
       BiomarkR::ImputeFeatureIntensity(method = "knn") %>%
-      ## Normalize on sample
-      BiomarkR::normalizeIntensityOnSample(plot = F) %>%
       ## Selecting necessary columns
       dplyr::select("Peptide", "Intensity", "Status", "Sample") %>%
       ## pivoting wider
       tidyr::pivot_wider(names_from = "Peptide", values_from = "Intensity")
 
     ## Calculating PCA
-    PCA <- pcaMethods::pca(select(PCAData, contains("_")), nPcs = 3)
+    PCA <- pcaMethods::pca(select(PCAData, contains("_")), nPcs = 3, method = "svd")
 
   }
 
