@@ -4,10 +4,28 @@
 \alias{MEGENA}
 \title{MEGENA}
 \usage{
-MEGENA(dataset, plotname = "")
+MEGENA(
+  dataset,
+  plotname = "",
+  cor.method = "pearson",
+  direction = "absolute",
+  n.perm = 100,
+  FDR.cutoff = 0.05,
+  min.module.size = 20
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
+
+\item{cor.method}{The correlation method to be used. Default is "pearson"}
+
+\item{direction}{The direction of the correlation. Default is "absolute"}
+
+\item{n.perm}{The number of permutations to be used. Default is 100}
+
+\item{FDR.cutoff}{The FDR cutoff to be used. Default is 5 \%}
+
+\item{min.module.size}{The minimum module size to be used. Default is 20}
 }
 \value{
 A list object containing the results of the MEGENA analysis, the module table, the hierarchy plot, the STRING analysis and the correlation plot

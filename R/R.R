@@ -6023,9 +6023,14 @@ MultiWayComaprison <- function(dataset, plotname = ""){
 #' @title MEGENA
 #' @description Multiscale Embedded Gene Co-expression Network Analysis (MEGENA) for the specified dataset.
 #' @param dataset The dataset to be tested
+#' @param cor.method The correlation method to be used. Default is "pearson"
+#' @param direction The direction of the correlation. Default is "absolute"
+#' @param n.perm The number of permutations to be used. Default is 100
+#' @param FDR.cutoff The FDR cutoff to be used. Default is 5 %
+#' @param min.module.size The minimum module size to be used. Default is 20
 #' @return A list object containing the results of the MEGENA analysis, the module table, the hierarchy plot, the STRING analysis and the correlation plot
 #' @export
-MEGENA <- function(dataset, plotname = ""){
+MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "absolute", n.perm = 100, FDR.cutoff = 0.05, min.module.size = 20){
 
   TestData <- dataset %>%
     dplyr::select(Sample, Protein, Intensity) %>%
@@ -6037,20 +6042,20 @@ MEGENA <- function(dataset, plotname = ""){
     as.matrix() %>% t()
 
   # Calculate the correlation matrix
-  cor_matrix <- MEGENA::calculate.correlation(TestData, method = "spearman", is.signed = T)
+  cor_matrix <- MEGENA::calculate.rho.signed(TestData, estimator = cor.method, direction = direction, n.perm = n.perm, FDR.cutoff = FDR.cutoff)
 
   # Construct the PFN
-  pfn <- MEGENA::calculate.PFN(cor_matrix)
+  pfn <- MEGENA::calculate.PFN(cor_matrix$signif.ijw)
 
   ## Construct the graph
   g <- igraph::graph_from_data_frame(pfn, directed = FALSE)
 
   ## Calculate the modules
-  MEGENA.output <- MEGENA::do.MEGENA(g, min.size = 20 ,remove.unsig = TRUE)
+  MEGENA.output <- MEGENA::do.MEGENA(g, min.size = min.module.size ,remove.unsig = TRUE)
 
   ## Summarize the modules
   summary.output <- MEGENA::MEGENA.ModuleSummary(MEGENA.output,
-                                                 min.size = 20, max.size = igraph::vcount(g)/2,
+                                                 min.size = min.module.size, max.size = igraph::vcount(g)/2,
                                                  output.sig = TRUE)
 
   ## Extract module table
@@ -6060,14 +6065,111 @@ MEGENA <- function(dataset, plotname = ""){
   ## make hierarchy plot
   hierarchy.obj <- MEGENA::plot_module_hierarchy(module.table = module.table, label.scaleFactor = 0.15,
                                                  arrow.size = 0.03, node.label.color = "blue")
-  # Hierarchy plot
-  HirarchyPlot <- hierarchy.obj[[1]]
 
-  ## modify Hierarchy plot
-  HirarchyPlot <- HirarchyPlot +
-    ggplot2::ggtitle(plotname) +
+  # Make nicer Hirachy plot
+  # Input data
+  module_df <- module.table %>%
+    dplyr::select(id, module.parent)
+
+  # Build edge list
+  edges <- module_df %>%
+    dplyr::select(from = module.parent, to = id)
+
+  # List of all nodes
+  all_nodes <- unique(c(module_df$id, module_df$module.parent))
+
+  # Identify true roots (modules that are parents but not children)
+  true_roots <- setdiff(module_df$module.parent, module_df$id)
+
+  # Add dummy root if multiple roots exist
+  if (length(true_roots) > 1) {
+    dummy_root <- "ROOT"
+    dummy_edges <- data.frame(from = dummy_root, to = true_roots)
+    edges <- bind_rows(edges, dummy_edges)
+    all_nodes <- unique(c(all_nodes, dummy_root))
+  }
+
+  # Create node dataframe and graph
+  nodes <- data.frame(name = all_nodes)
+  g <- graph_from_data_frame(edges, vertices = nodes, directed = TRUE)
+
+  # Determine root vertex
+  root <- if ("ROOT" %in% V(g)$name) "ROOT" else true_roots[1]
+  root_vid <- which(V(g)$name == root)
+
+  # Compute node depths
+  depths <- bfs(g, root = root_vid, dist = TRUE)$dist
+  V(g)$depth <- depths
+
+  # Function to assign angles recursively
+  assign_angles <- function(graph, node, start_angle, end_angle) {
+    children <- neighbors(graph, node, mode = "out")
+    angle_map <- list()
+
+    # Get current node name
+    node_name <- V(graph)$name[node]
+
+    # Assign center angle to current node
+    center_angle <- (start_angle + end_angle) / 2
+    angle_map[[node_name]] <- center_angle
+
+    if (length(children) > 0) {
+      angle_span <- end_angle - start_angle
+      angle_per_child <- angle_span / length(children)
+      for (i in seq_along(children)) {
+        child <- children[i]
+        child_start <- start_angle + (i - 1) * angle_per_child
+        child_end <- child_start + angle_per_child
+        child_angles <- assign_angles(graph, child, child_start, child_end)
+        angle_map <- c(angle_map, child_angles)
+      }
+    }
+    return(angle_map)
+  }
+
+  # Assign angles to all nodes
+  angle_list <- assign_angles(g, root_vid, 0, 2 * pi)
+
+  # Create layout data frame
+  layout_df <- data.frame(
+    name = names(angle_list),
+    angle = unlist(angle_list),
+    depth = V(g)$depth[match(names(angle_list), V(g)$name)]
+  ) %>%
+    mutate(
+      x = cos(angle) * (depth + 1),
+      y = sin(angle) * (depth + 1)
+    )
+
+  ## filter for depth = 2
+  # layout_df <- layout_df %>% filter(depth <= 2)
+
+  # Add coordinates to the graph
+  V(g)$x <- layout_df$x[match(V(g)$name, layout_df$name)]
+  V(g)$y <- layout_df$y[match(V(g)$name, layout_df$name)]
+
+  # Convert to tidygraph and plot
+  tg <- as_tbl_graph(g)
+
+  # Add depth circles (1 to max depth, skipping 0)
+  max_depth <- max(layout_df$depth)
+
+  circle_df <- tibble(
+    depth = 1:max_depth,
+    radius = depth + 1
+  )
+
+  HirarchyPlot <- ggraph(tg, layout = "manual", x = V(g)$x, y = V(g)$y) +
+    geom_edge_link(color = "grey60") +
+    geom_circle(data = circle_df, aes(x0 = 0, y0 = 0, r = radius),
+                linetype = "dashed", color = "lightblue", inherit.aes = FALSE) +
+    geom_node_point(aes(color = as.factor(depth)), size = 10) +
+    # geom_node_text(aes(label = ifelse(name == "ROOT", "", name)), repel = TRUE, size = 5) +
+    # Circles by depth
+    coord_equal() +
+    theme_void() +
     ## delete legend
-    ggplot2::theme(legend.position = "none")
+    theme(legend.position = "none")
 
   ## Correlate modules with Status
 
@@ -6099,7 +6201,7 @@ MEGENA <- function(dataset, plotname = ""){
     CorrelationResults <- CorrelationData %>%
       dplyr::group_by(Module) %>%
       dplyr::summarize(correlation = stats::cor.test(x = Intensity,y = .data[[var]], method = "spearman")$estimate,
-                                               p.value = stats::cor.test(Intensity, .data[[var]])$p.value) %>%
+                       p.value = stats::cor.test(Intensity, .data[[var]])$p.value) %>%
       dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
       dplyr::arrange(correlation)
 
@@ -6131,6 +6233,7 @@ MEGENA <- function(dataset, plotname = ""){
 
   return(output)
 }
+
 
 
 ## ToDo
