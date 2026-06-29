@@ -705,7 +705,6 @@ ImputeFeatureIntensity <- function(dataset, method = "knn"){
         dplyr::mutate(Intensity = ifelse(base::is.na(Intensity), half_min, Intensity)) %>%
         dplyr::ungroup() %>%
         ## back to log2 space
-        dplyr::mutate(Intensity = log2(Intensity)) %>%
         dplyr::select(-c("half_min"))
 
     }
@@ -6164,7 +6163,7 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
     geom_circle(data = circle_df, aes(x0 = 0, y0 = 0, r = radius),
                 linetype = "dashed", color = "lightblue", inherit.aes = FALSE) +
     geom_node_point(aes(color = as.factor(depth)), size = 10) +
-    # geom_node_text(aes(label = ifelse(name == "ROOT", "", name)), repel = TRUE, size = 5) +
+    geom_node_text(aes(label = ifelse(name == "ROOT", "", name)), repel = TRUE, size = 3) +
     # Circles by depth
     coord_equal() +
     theme_void() +
