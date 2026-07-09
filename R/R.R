@@ -2466,7 +2466,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param standardize A logical value indicating whether to standardize the features before fitting the model. Default is TRUE, which is recommended for LASSO regression to ensure that all features are on the same scale.
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
-LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T){
+LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL){
 
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
@@ -2490,37 +2490,50 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T){
 
   cvfit <- glmnet::cv.glmnet(
     X, y,
-    family = "binomial",      # logistic regression
-    type.measure = "auc",     # choose lambda by AUC
-    nfolds = nCV,# cross validation
+    family = "binomial",
+    type.measure = "auc",
+    nfolds = nCV,
     alpha = 1,
-    standardize = standardize     # standardize features
+    standardize = standardize,
+    keep = TRUE               # Keep out-of-fold predictions
   )
 
   # Plot CV performance
   model <- cvfit
 
-  ## extract Lamda and AUC
-  best_lambda <- cvfit$lambda.1se
-  cv_auc <- base::max(cvfit$cvm)
+  if (is.null(NProt)) {
+    ## extract Lamda
+    best_lambda <- cvfit$lambda.1se
+  } else {
+
+    ## extract Lamda and AUC
+    target_lambdas <- model$lambda[which(model$nzero == NProt)]
+    # Choose the lambda with the highest AUC among those with 10 features
+    best_index <- which(model$lambda %in% target_lambdas & model$cvm == max(model$cvm[model$lambda %in% target_lambdas]))
+    chosen_lambda <- model$lambda[best_index]
+    best_lambda <- chosen_lambda[1]
+
+  }
 
   ## extract PoIs
-  coef_df <- stats::coef(cvfit, s = "lambda.1se")
+  coef_df <- stats::coef(cvfit, s = best_lambda)
   selected <- base::rownames(coef_df)[BiocGenerics::which(coef_df != 0)]
   selected <- selected[selected != "(Intercept)"]
 
-  ## Calculate ROC
-  # Use type = "response" to get probabilities between 0 and 1
-  preds <- predict(cvfit, newx = X, s = "lambda.min", type = "response")
+  # 1. Find the column index corresponding to your best_lambda
+  lambda_idx <- which(cvfit$lambda == best_lambda)
 
-  # 2. Generate the ROC object
-  ROC <- pROC::roc(y, as.vector(preds))
+  # 2. Extract the cross-validated log-odds for that specific lambda
+  cv_log_odds <- cvfit$fit.preval[, lambda_idx]
 
+  # 3. Convert log-odds to probabilities for pROC
+  preds_cv <- 1 / (1 + exp(-cv_log_odds))
 
-  # 1. Extract base coordinates
+  # 4. Generate the honest ROC object
+  ROC <- pROC::roc(y, preds_cv)
+
+  # 5. Extract coordinates, AUC, and CI safely
   Coordinates <- pROC::coords(ROC)
-
-  # 2. Extract AUC and CI text
   AUC <- pROC::auc(ROC)
   CI  <- pROC::ci.auc(ROC)
 
@@ -2560,7 +2573,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T){
   # Calibration Plot
 
   # 1. Generate predicted probabilities
-  preds <- as.vector(stats::predict(cvfit, newx = X, s = "lambda.min", type = "response"))
+  preds <- as.vector(stats::predict(model, newx = X, s = best_lambda, type = "response"))
 
   # 2. Bin the data into 10 deciles and calculate observed percentages
   # 'y' needs to be a factor for caret's calibration function
@@ -2589,7 +2602,8 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T){
     selected_proteins = selected,
     CalibrationPlot = CalibrationPlot,
     ROCPlot = ROCPlot,
-    coefs = coef_df
+    coefs = coef_df,
+    cvfit = cvfit
   ))
 }
 
