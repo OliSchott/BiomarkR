@@ -2464,6 +2464,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' ASSO model. Example: c("Protein1", "Protein2", "Protein3"). It is recommended to select proteins that are biologically relevant or have shown some association with the outcome variable in previous analyses.
 #' @param nCV The number of cross-validation folds to be used for selecting the optimal
 #' @param standardize A logical value indicating whether to standardize the features before fitting the model. Default is TRUE, which is recommended for LASSO regression to ensure that all features are on the same scale.
+#' @param NProt  An optional integer specifying the desired number of non-zero coefficients (selected proteins) in the final model. If NULL (default), the function will use the lambda value that minimizes cross-validated error.
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
 LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL){

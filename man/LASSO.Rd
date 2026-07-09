@@ -4,7 +4,7 @@
 \alias{LASSO}
 \title{LASSO}
 \usage{
-LASSO(dataset, PoIs, nCV = 10, plotname = "", standardize = T)
+LASSO(dataset, PoIs, nCV = 10, plotname = "", standardize = T, NProt = NULL)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -15,6 +15,8 @@ ASSO model. Example: c("Protein1", "Protein2", "Protein3"). It is recommended to
 \item{nCV}{The number of cross-validation folds to be used for selecting the optimal}
 
 \item{standardize}{A logical value indicating whether to standardize the features before fitting the model. Default is TRUE, which is recommended for LASSO regression to ensure that all features are on the same scale.}
+
+\item{NProt}{An optional integer specifying the desired number of non-zero coefficients (selected proteins) in the final model. If NULL (default), the function will use the lambda value that minimizes cross-validated error.}
 }
 \value{
 A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
