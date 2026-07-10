@@ -6090,10 +6090,10 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
     dplyr::select(from = module.parent, to = id)
 
   # List of all nodes
-  all_nodes <- unique(c(module_df$id, module_df$module.parent))
+  all_nodes <- base::unique(c(module_df$id, module_df$module.parent))
 
   # Identify true roots (modules that are parents but not children)
-  true_roots <- setdiff(module_df$module.parent, module_df$id)
+  true_roots <- base::setdiff(module_df$module.parent, module_df$id)
 
   # Add dummy root if multiple roots exist
   if (length(true_roots) > 1) {
@@ -6105,23 +6105,23 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
 
   # Create node dataframe and graph
   nodes <- data.frame(name = all_nodes)
-  g <- graph_from_data_frame(edges, vertices = nodes, directed = TRUE)
+  g <- igraph::graph_from_data_frame(edges, vertices = nodes, directed = TRUE)
 
   # Determine root vertex
-  root <- if ("ROOT" %in% V(g)$name) "ROOT" else true_roots[1]
-  root_vid <- which(V(g)$name == root)
+  root <- if ("ROOT" %in% igraph::V(g)$name) "ROOT" else true_roots[1]
+  root_vid <- which(igraph::V(g)$name == root)
 
   # Compute node depths
-  depths <- bfs(g, root = root_vid, dist = TRUE)$dist
-  V(g)$depth <- depths
+  depths <- igraph::bfs(g, root = root_vid, dist = TRUE)$dist
+  igraph::V(g)$depth <- depths
 
   # Function to assign angles recursively
   assign_angles <- function(graph, node, start_angle, end_angle) {
-    children <- neighbors(graph, node, mode = "out")
+    children <- igraph::neighbors(graph, node, mode = "out")
     angle_map <- list()
 
     # Get current node name
-    node_name <- V(graph)$name[node]
+    node_name <- igraph::V(graph)$name[node]
 
     # Assign center angle to current node
     center_angle <- (start_angle + end_angle) / 2
@@ -6148,44 +6148,44 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
   layout_df <- data.frame(
     name = names(angle_list),
     angle = unlist(angle_list),
-    depth = V(g)$depth[match(names(angle_list), V(g)$name)]
+    depth = igraph::V(g)$depth[base::match(names(angle_list), V(g)$name)]
   ) %>%
-    mutate(
-      x = cos(angle) * (depth + 1),
-      y = sin(angle) * (depth + 1)
+    dplyr::mutate(
+      x = base::cos(angle) * (depth + 1),
+      y = base::sin(angle) * (depth + 1)
     )
 
   ## filter for depth = 2
   # layout_df <- layout_df %>% filter(depth <= 2)
 
   # Add coordinates to the graph
-  V(g)$x <- layout_df$x[match(V(g)$name, layout_df$name)]
-  V(g)$y <- layout_df$y[match(V(g)$name, layout_df$name)]
+  igraph::V(g)$x <- layout_df$x[match(V(g)$name, layout_df$name)]
+  igraph::V(g)$y <- layout_df$y[match(V(g)$name, layout_df$name)]
 
   # Convert to tidygraph and plot
-  tg <- as_tbl_graph(g)
+  tg <- tidygraph::as_tbl_graph(g)
 
   # Add depth circles (1 to max depth, skipping 0)
   max_depth <- max(layout_df$depth)
 
-  circle_df <- tibble(
+  circle_df <- tibble::tibble(
     depth = 1:max_depth,
     radius = depth + 1
   )
 
-  HirarchyPlot <- ggraph(tg, layout = "manual", x = V(g)$x, y = V(g)$y) +
-    geom_edge_link(color = "grey60") +
-    geom_circle(data = circle_df, aes(x0 = 0, y0 = 0, r = radius),
-                linetype = "dashed", color = "lightblue", inherit.aes = FALSE) +
-    geom_node_point(aes(color = as.factor(depth)), size = 10) +
-    geom_node_text(aes(label = ifelse(name == "ROOT", "", name)), repel = TRUE, size = 3) +
+  HirarchyPlot <- ggraph::ggraph(tg, layout = "manual", x = igraph::V(g)$x, y = igraph::V(g)$y) +
+    ggraph::geom_edge_link(color = "grey60") +
+    ggforce::geom_circle(data = circle_df, aes(x0 = 0, y0 = 0, r = radius),
+                         linetype = "dashed", color = "lightblue", inherit.aes = FALSE) +
+    ggraph::geom_node_point(aes(color = as.factor(depth)), size = 10) +
+    ggraph::geom_node_text(aes(label = ifelse(name == "ROOT", "", name)), repel = TRUE, size = 3) +
     # Circles by depth
-    coord_equal() +
+    ggplot2::coord_equal() +
     theme_void() +
     ## delete legend
     theme(legend.position = "none")
 
-  ## Correlate modules with Status
+  # Correlate modules with Status
 
   ## Proteins in Modules
   ProteinsInModules <- data.frame()
@@ -6196,44 +6196,93 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
     ProteinsInModules <- rbind(ProteinsInModules, data.frame(Protein = Proteins, Module = modules))
   }
 
-  CorrelationData <- base::merge(dataset, ProteinsInModules, by = "Protein")
+  ## Calculate Eigengenes for every module and correlate with metadata
+  CorrelationResults <- data.frame()
+  EigenGenes <- list()
+  ## Loop through each module
+  for (module in unique(ProteinsInModules$Module)) {
+    ### Get proteins in the module
+    proteins_in_module <- ProteinsInModules$Protein[ProteinsInModules$Module == module]
+
+    ### Calculate the module eigengene (first principal component)
+    module_data <- TestData[proteins_in_module, ]
+    pca_result <- stats::prcomp(t(module_data), center = TRUE, scale. = TRUE)
+    module_eigengene <- pca_result$x[, 1]
+
+    #### Put Eigengene in List
+    EigenGenes[[module]] <- module_eigengene
+
+    ### Correlate the module eigengene with metadata (e.g., Age)
+    metadata <- dataset %>%
+      tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
+      dplyr::select(!contains("_"))
+
+    ### convert metadata to numeric if not already numeric
+    metadata <- metadata %>%
+      dplyr::mutate(dplyr::across(tidyselect::where(is.character), as.factor)) %>%
+      dplyr::mutate(dplyr::across(tidyselect::where(is.factor), as.numeric))
 
 
-  ## calculate correlation between the modules and meta variables
-  vars <- colnames(dataset %>% dplyr::select(-c(Protein, Intensity, Sample)))
+    ### Calculate correlation with metavaraibles
+    correlation_results <- data.frame()
+    for (meta_var in colnames(metadata)[-1]) {  # Exclude the Sample column
+      cor_test <- stats::cor.test(module_eigengene, metadata[[meta_var]], method = "spearman")
+      rho <- cor_test$estimate
+      p <- cor_test$p.value
 
-  CorrelationResultsList <- list()
+      correlation_results <- rbind(correlation_results, data.frame(Module = module, Metadata = meta_var, Rho = rho, PValue = p))
 
-  for(i in 1:length(vars)){
-    ## define var
-    var <- vars[i]
 
-    ## make var a factor
-    CorrelationData[[var]] <- base::as.numeric(base::as.factor(CorrelationData[[var]]))
+    }
 
-    ## Calculate Correlations and p-values
-    CorrelationResults <- CorrelationData %>%
-      dplyr::group_by(Module) %>%
-      dplyr::summarize(correlation = stats::cor.test(x = Intensity,y = .data[[var]], method = "spearman")$estimate,
-                       p.value = stats::cor.test(Intensity, .data[[var]])$p.value) %>%
-      dplyr::mutate(p.value.adj = stats::p.adjust(p.value, method = "fdr")) %>%
-      dplyr::arrange(correlation)
-
-    ## Plot Correlation Results
-    CorrelationPlot <- ggplot2::ggplot(CorrelationResults, ggplot2::aes(x = correlation, y = -log10(p.value.adj))) +
-      ggplot2::geom_point() +
-      ggplot2::geom_abline(intercept = -log10(0.05), slope = 0, color = "grey", linetype = 2) +
-      ggplot2::geom_abline(intercept = -log10(0.01), slope = 0, color = "red", linetype = 2) +
-      ggrepel::geom_text_repel(ggplot2::aes(label = Module), box.padding = 0.5) +
-      ggplot2::theme_minimal() +
-      ggplot2::labs(x = "Correlation", y = "-log10(p.adj)") +
-      ggplot2::ggtitle(paste("Correlation between", var, "and Modules"))
-
-    ## put results into list
-    CorrelationResultsList$Data[[var]] <- CorrelationResults
-    CorrelationResultsList$Plot[[var]] <- CorrelationPlot
-
+    ## put in dataframe
+    CorrelationResults <- rbind(CorrelationResults, correlation_results)
   }
+
+  ## Adjust p-values for multiple testing
+  CorrelationResults$AdjustedPValue <- stats::p.adjust(CorrelationResults$PValue, method = "BH")
+
+  ## Make hetamp plot of correlation results
+  CorrelationResults$Significant <- ifelse(CorrelationResults$AdjustedPValue < 0.05, "Significant", "Not Significant")
+
+  CorrelationResults <- CorrelationResults %>%
+    base::merge(module_df %>% dplyr::rename(Module = id ), by = "Module") %>%
+    dplyr::mutate(module.parent = as.numeric(as.factor(module.parent)))
+
+  ## Calculate similarities between EigenGenes
+  all_names <- base::unique(base::unlist(base::lapply(EigenGenes, names)))
+
+  ### Align vectors to match the unique names and fill missing values with 0
+  aligned_list <- base::lapply(EigenGenes, function(v) {
+    out <- stats::setNames(rep(0, length(all_names)), all_names)
+    out[base::names(v)] <- v
+    return(out)
+  })
+
+  ### Bind into a matrix/data frame and calculate correlation
+  df <- base::do.call(cbind, aligned_list)
+  cor_matrix <- stats::cor(df)
+
+  # calculate distance between modules
+  dist_matrix <- stats::as.dist(1 - cor_matrix)
+
+  # 2. Perform hierarchical clustering to find the optimal order
+  hc <- stats::hclust(dist_matrix)
+
+  # 3. Extract the ordered vector names
+  ordered_names <- hc$labels[hc$order]
+
+  CorrelationResults <- CorrelationResults %>%
+    dplyr::mutate(Module = base::factor(Module, levels = ordered_names))
+  ## Plot
+  EigenGenePlot <- ggplot(CorrelationResults, aes(x = Metadata, y = Module, fill = Rho)) +
+    geom_tile() +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    theme_minimal() +
+    labs(title = "Module-Eigengene-Metadata Correlation Heatmap", x = "Metadata", y = "Module") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_text(aes(label = ifelse(Significant == "Significant", "*", "")), color = "black", size = 5)
+
 
 
   output <- list()
@@ -6242,8 +6291,9 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
   output$Summary <- summary.output
   output$ModuleTable <- module.table
   output$HirarchyPlot <- HirarchyPlot
-  output$CorrelationResults <- CorrelationResultsList
+  output$CorrelationResults <- CorrelationResults
   output$CorrelationMatrix <- cor_matrix
+  output$EigenGenePlot <- EigenGenePlot
 
   return(output)
 }
