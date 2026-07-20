@@ -2470,9 +2470,10 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @export
 LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL, covariates = NULL){
 
+
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
-    tidyr::pivot_wider(id_cols = c(Sample, Status),names_from = Protein, values_from = Intensity) %>%
+    tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
     tidyr::pivot_longer(cols = contains("_"), names_to = "Protein", values_to = "Intensity")
 
   ## error if missing values in Intensity
@@ -2481,11 +2482,11 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
   }
 
   GLMData <- GLMData %>%
-    dplyr::select(Sample, Protein, Intensity, Status) %>%
     tidyr::pivot_wider(names_from = Protein, values_from = Intensity)
 
 
-  f <- paste("Status ~ Intensity", paste("+", covariates, collapse = "+", "+") ,paste(PoIs,collapse = " + "))
+  f <- paste("Status ~ ", paste(covariates, collapse = "+"), "+",paste(PoIs,collapse = " + "))
+  f <- stats::as.formula(f)
 
   X <- model.matrix(
     f,
