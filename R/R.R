@@ -2465,6 +2465,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param nCV The number of cross-validation folds to be used for selecting the optimal
 #' @param standardize A logical value indicating whether to standardize the features before fitting the model. Default is TRUE, which is recommended for LASSO regression to ensure that all features are on the same scale.
 #' @param NProt  An optional integer specifying the desired number of non-zero coefficients (selected proteins) in the final model. If NULL (default), the function will use the lambda value that minimizes cross-validated error.
+#' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex").
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
 LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL, covariates = NULL){
@@ -2899,6 +2900,7 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @param dataset The dataset to be tested, It is recommended that Status is a factor with the controls as the first level
 #' @param PoIs A vector containing the Proteins of interest.
 #' @param Covariates A vector containing the covariates to be included in the model. Example: c("Age", "Sex")
+#' @param allowInteractions A logical value indicating whether to allow interactions between PoIs in the model. Default is FALSE
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the GLM predictions and a plot including ROC curve and calibration plot
 #' @export
@@ -4180,6 +4182,7 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
 #' @param FalseNegativeWeight The weight of false negatives in the ROC analysis (default is 1, recommended is 0.2 to 5)
 #' @param prevalence The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")
 #' @param Covariates A vector containing the names of covariates to be included in the logistic regression model (default is NULL)
+#' @param allowInteractions Logical value indicating if interactions between PoIs should be included in the logistic regression model (default is FALSE)
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
