@@ -10,7 +10,8 @@ BiomarkerPanel(
   n,
   FalseNegativeWeight = 1,
   prevalence = "auto",
-  Covariates = NULL
+  Covariates = NULL,
+  allowInteractions = F
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ BiomarkerPanel(
 \item{prevalence}{The prevalence of the disease in the population. Used to bias the discovery towards higher specificity (default is "auto")}
 
 \item{Covariates}{A vector containing the names of covariates to be included in the logistic regression model (default is NULL)}
+
+\item{allowInteractions}{Logical value indicating if interactions between PoIs should be included in the logistic regression model (default is FALSE)}
 }
 \value{
 A list object containing the results of the Biomarker Panel analysis

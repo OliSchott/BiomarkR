@@ -4,7 +4,13 @@
 \alias{PredictGLM}
 \title{PredictGLM}
 \usage{
-PredictGLM(dataset, PoIs, Covariates = NULL, plotname = "")
+PredictGLM(
+  dataset,
+  PoIs,
+  Covariates = NULL,
+  plotname = "",
+  allowInteractions = FALSE
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested, It is recommended that Status is a factor with the controls as the first level}
@@ -14,6 +20,8 @@ PredictGLM(dataset, PoIs, Covariates = NULL, plotname = "")
 \item{Covariates}{A vector containing the covariates to be included in the model. Example: c("Age", "Sex")}
 
 \item{plotname}{The name to be displayed on created plots}
+
+\item{allowInteractions}{A logical value indicating whether to allow interactions between PoIs in the model. Default is FALSE}
 }
 \value{
 A list object containing the results of the GLM predictions and a plot including ROC curve and calibration plot

@@ -1189,7 +1189,7 @@ RemoveOutliers2 <- function(dataset, StdDevs = 3, plotname = "Outlier Plot"){
   base::print(base::paste("The following samples were removed as outliers:", base::paste(Outliers, collapse = ", ")))
 
   datasetWithoutOutliers <- dataset %>%
-    dplyr::filter(Sample %in% ProteinCounts$Sample[ProteinCounts$ProteinCount >= LowerBound | ProteinCounts$ProteinCount <= UpperBound])
+    dplyr::filter(!Sample %in% Outliers)
 
   ## Boxplot
   Plot <- ggplot2::ggplot(ProteinCounts, aes(x = "",y = ProteinCount)) +
@@ -2467,7 +2467,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @param NProt  An optional integer specifying the desired number of non-zero coefficients (selected proteins) in the final model. If NULL (default), the function will use the lambda value that minimizes cross-validated error.
 #' @return A list object containing the fitted LASSO model, the best lambda value, the cross-validated AUC, and the selected proteins with non-zero coefficients.
 #' @export
-LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL){
+LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL, covariates = NULL){
 
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
@@ -2484,7 +2484,13 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
     tidyr::pivot_wider(names_from = Protein, values_from = Intensity)
 
 
-  X <- base::as.matrix(GLMData %>% dplyr::select(-Sample, -Status))
+  f <- paste("Status ~ Intensity", paste("+", covariates, collapse = "+", "+") ,paste(PoIs,collapse = " + "))
+
+  X <- model.matrix(
+    f,
+    data = GLMData
+  )[, -1]  # Remove intercept
+
   y <- GLMData$Status
 
   base::set.seed(123)
@@ -2558,7 +2564,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
 
   ## Make ROC Plot
   ROCPlot <- ggplot(ROCData) +
-    geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", size = 1, linewidth = 2) +
+    geom_path(data = ROCData, aes(x = FPR, y = TPR), color = "blue", linewidth = 2) +
     geom_ribbon(data = ROCData, aes(x = FPR, ymin = CI_Lower, ymax = CI_Upper), fill = "black", alpha = 0.2) +
     theme_minimal()+
     xlab("FRP")+
@@ -2896,7 +2902,7 @@ ROC <- function(dataset, PoI, plotname = ""){
 #' @param plotname The name to be displayed on created plots
 #' @return A list object containing the results of the GLM predictions and a plot including ROC curve and calibration plot
 #' @export
-PredictGLM <- function(dataset, PoIs, Covariates = NULL, plotname = ""){
+PredictGLM <- function(dataset, PoIs, Covariates = NULL, plotname = "", allowInteractions = FALSE){
 
   ## error of more than 2 classes
   if(length(unique(dataset$Status)) > 2){
@@ -2911,7 +2917,15 @@ PredictGLM <- function(dataset, PoIs, Covariates = NULL, plotname = ""){
     ## make dummy variable
     dplyr::mutate(DStatus = ifelse(Status == unique(Status)[1], 0, 1))
 
-  f <- stats::as.formula(base::paste("DStatus ~", base::paste(PoIs, collapse = " * "), if(!is.null(Covariates)) base::paste(" + ", base::paste(Covariates, collapse = " + ")), sep = ""))
+  if(allowInteractions == FALSE){
+
+    f <- stats::as.formula(base::paste("DStatus ~", base::paste(PoIs, collapse = " + "), if(!is.null(Covariates)) base::paste(" + ", base::paste(Covariates, collapse = " + ")), sep = ""))
+
+  }else{
+
+    f <- stats::as.formula(base::paste("DStatus ~", base::paste(PoIs, collapse = " * "), if(!is.null(Covariates)) base::paste(" + ", base::paste(Covariates, collapse = " + ")), sep = ""))
+
+  }
 
   ## calculage glm
   model <- stats::glm(f, data = GLMData, family = binomial)
@@ -4169,7 +4183,7 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
 
-BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto", Covariates = NULL) {
+BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto", Covariates = NULL, allowInteractions = F) {
 
   #------------------------------------------------------------
   # 1. Generate all combinations of PoIs up to size n
@@ -4218,18 +4232,36 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
     proteins <- as.character(proteins)
     proteins <- na.omit(proteins)
 
-    # Build formula: Status ~ Protein1 * Protein2 * ... + Covariates
-    f <- as.formula(
-      paste0(
-        "Status ~ ",
-        paste0(proteins, collapse = " * "),
-        if (!is.null(Covariates)) {
-          paste0(" + ", paste0(Covariates, collapse = " + "))
-        } else {
-          ""
-        }
+
+    ## check for interactions allowed
+    if(allowInteractions){
+      # Build formula: Status ~ Protein1 * Protein2 * ... + Covariates
+      f <- as.formula(
+        paste0(
+          "Status ~ ",
+          paste0(proteins, collapse = " * "),
+          if (!is.null(Covariates)) {
+            paste0(" + ", paste0(Covariates, collapse = " + "))
+          } else {
+            ""
+          }
+        )
       )
-    )
+    } else {
+      # Build formula: Status ~ Protein1 + Protein2 + ... + Covariates
+      f <- as.formula(
+        paste0(
+          "Status ~ ",
+          paste0(proteins, collapse = " + "),
+          if (!is.null(Covariates)) {
+            paste0(" + ", paste0(Covariates, collapse = " + "))
+          } else {
+            ""
+          }
+        )
+      )
+    }
+
 
     # logistic regression
     model <- glm(f, data = MLData, family = binomial())
