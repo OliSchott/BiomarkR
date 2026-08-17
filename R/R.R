@@ -1887,8 +1887,8 @@ LTest <- function(dataset, plotname = "", Covariates = NULL){
     warning("Status variable is not a factor, converting to factor. It is recommended to manually convert Status to a factor and set the control level as the first level.")
   }
 
-  Status1 <- dataset$Status %>% unique() %>% .[1] %>% as.character()
-  Status2 <- dataset$Status %>% unique() %>% .[2] %>% as.character()
+  Status1 <- dataset$Status %>% levels() %>% .[1] %>% as.character()
+  Status2 <- dataset$Status %>% levels() %>% .[2] %>% as.character()
 
   f <- stats::as.formula(base::paste(
     "DStatus ~", "Intensity",
@@ -2470,7 +2470,6 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
 #' @export
 LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt = NULL, covariates = NULL){
 
-
   GLMData <- dataset %>%
     dplyr::filter(Protein %in% PoIs) %>%
     tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
@@ -2507,6 +2506,10 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
     keep = TRUE               # Keep out-of-fold predictions
   )
 
+  ## Save for later use in predicting new data
+  Terms <- stats::terms(f)
+  xlevels <- stats::.getXlevels(Terms, GLMData)
+
   # Plot CV performance
   model <- cvfit
 
@@ -2529,22 +2532,23 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
   selected <- base::rownames(coef_df)[BiocGenerics::which(coef_df != 0)]
   selected <- selected[selected != "(Intercept)"]
 
-  # 1. Find the column index corresponding to your best_lambda
-  lambda_idx <- which(cvfit$lambda == best_lambda)
+  lambda_idx <- which.min(abs(cvfit$lambda - best_lambda))
 
-  # 2. Extract the cross-validated log-odds for that specific lambda
   cv_log_odds <- cvfit$fit.preval[, lambda_idx]
 
-  # 3. Convert log-odds to probabilities for pROC
-  preds_cv <- 1 / (1 + exp(-cv_log_odds))
+  preds_cv <- plogis(cv_log_odds)
 
-  # 4. Generate the honest ROC object
-  ROC <- pROC::roc(y, preds_cv)
+  ROC <- pROC::roc(
+    response = y,
+    predictor = preds_cv,
+    quiet = TRUE
+  )
+
+  AUC <- pROC::auc(ROC)
+  CI  <- pROC::ci.auc(ROC)
 
   # 5. Extract coordinates, AUC, and CI safely
   Coordinates <- pROC::coords(ROC)
-  AUC <- pROC::auc(ROC)
-  CI  <- pROC::ci.auc(ROC)
 
   # 3. Calculate CI using the EXACT specificities present in your Coordinates
   # This prevents grid mismatch entirely
@@ -2582,7 +2586,7 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
   # Calibration Plot
 
   # 1. Generate predicted probabilities
-  preds <- as.vector(stats::predict(model, newx = X, s = best_lambda, type = "response"))
+  preds <- preds_cv
 
   # 2. Bin the data into 10 deciles and calculate observed percentages
   # 'y' needs to be a factor for caret's calibration function
@@ -2603,6 +2607,39 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
     xlim(0, 100) + ylim(0, 100) +
     theme_minimal()
 
+  # Function to predict new data using the fitted model
+
+  predict = function(newdata){
+
+    mf <- model.frame(
+      Terms,
+      newdata,
+      xlev = xlevels
+    )
+
+    Xnew <- model.matrix(Terms, mf)[, -1, drop = FALSE]
+
+    missing <- setdiff(predictors, colnames(Xnew))
+
+    if(length(missing) > 0){
+      stop(
+        "Missing predictor(s): ",
+        paste(missing, collapse = ", ")
+      )
+    }
+
+    Xnew <- Xnew[, predictors, drop = FALSE]
+
+    as.vector(
+      predict(
+        cvfit,
+        newx = Xnew,
+        s = best_lambda,
+        type = "response"
+      )
+    )
+  }
+
   base::return(base::list(
     model = model,
     best_lambda = best_lambda,
@@ -2612,7 +2649,10 @@ LASSO <- function(dataset, PoIs ,nCV = 10, plotname = "", standardize = T, NProt
     CalibrationPlot = CalibrationPlot,
     ROCPlot = ROCPlot,
     coefs = coef_df,
-    cvfit = cvfit
+    cvfit = cvfit,
+    predictors = colnames(X),
+    formula = f,
+    predict = predict
   ))
 }
 
