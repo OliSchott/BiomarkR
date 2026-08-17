@@ -41,6 +41,7 @@
 #' @import jsonlite
 #' @import glmnet
 #' @import BiocGenerics
+#' @import logistf
 
 ## Data Import and Management
 ## add roxygen comments
@@ -1897,14 +1898,37 @@ LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"
     }
   ))
 
+  ## Define a quick, custom tidier for logistf objects
+  tidy_logistf <- function(x) {
+    tibble::tibble(
+      term      = names(x$coefficients),
+      estimate  = x$coefficients,
+      std.error = sqrt(diag(x$var)),
+      p.value   = x$prob
+    )
+  }
+
+  ## define Control funtion
+  params <- logistf::logistf.control(
+    maxit = 50,
+    maxhs = 0,
+    maxstep = 2,
+    lconv = 1e-05,
+    gconv = 1e-05,
+    xconv = 1e-05,
+    collapse = TRUE,
+    fit = "NR"
+  )
+
   ## GLM for ALyme
   GLMResults <- dataset %>%
-    dplyr::mutate(DStatus = ifelse(Status == Status1, 0,1)) %>%
+    dplyr::mutate(DStatus = ifelse(Status == Status1, 0, 1)) %>%
     dplyr::group_by(Protein) %>%
     tidyr::nest() %>%
     dplyr::mutate(
-      model = purrr::map(data, ~ stats::glm(formula = f, data = .x, family = "binomial")),
-      stats = purrr::map(model, ~ broom::tidy(.x))
+      model = purrr::map(data, ~ logistf::logistf(formula = f, data = .x, control = params)),
+      # Replaced broom::tidy with your new custom function
+      stats = purrr::map(model, ~ tidy_logistf(.x))
     ) %>%
     tidyr::unnest(stats) %>%
     dplyr::filter(term == "Intensity") %>%

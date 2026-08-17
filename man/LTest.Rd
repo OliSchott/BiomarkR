@@ -4,7 +4,7 @@
 \alias{LTest}
 \title{LTest}
 \usage{
-LTest(dataset, plotname = "", Covariates = NULL)
+LTest(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH")
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
