@@ -1874,7 +1874,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
 #' @param Covariates A character vector of covariates to be included in the model. Example: c("Age","Sex")
 #' @return A list object containing the results of the logistic regression, the significant features and a volcano plot
 #' @export
-LTest <- function(dataset, plotname = "", Covariates = NULL){
+LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"){
 
   ## error if Status is not binary
   if(length(unique(dataset$Status)) != 2){
@@ -1903,13 +1903,13 @@ LTest <- function(dataset, plotname = "", Covariates = NULL){
     dplyr::group_by(Protein) %>%
     tidyr::nest() %>%
     dplyr::mutate(
-      model = purrr::map(data, ~ stats::glm(formula = f, data = .x)),
+      model = purrr::map(data, ~ stats::glm(formula = f, data = .x, family = "binomial")),
       stats = purrr::map(model, ~ broom::tidy(.x))
     ) %>%
     tidyr::unnest(stats) %>%
     dplyr::filter(term == "Intensity") %>%
     dplyr::ungroup() %>%
-    rstatix::adjust_pvalue(method = "BH") %>%
+    rstatix::adjust_pvalue(method = p.adj.method) %>%
     dplyr::select(-c(model, data))
 
   Significant <- GLMResults %>%
