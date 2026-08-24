@@ -2930,7 +2930,7 @@ ROC <- function(dataset, PoI, plotname = ""){
     dplyr::mutate(Status = as.numeric(as.factor(Status)))
 
   ## calculate glm model using
-  glm_model <- stats::glm(Status ~ Intensity, data = MLData)
+  glm_model <- stats::glm(Status ~ Intensity, data = MLData, family = binomial)
 
   ## calculate ROC curve using pROC
   roc_curve <- pROC::roc(predictor = stats::predict(glm_model, type = "response"),
@@ -4409,6 +4409,334 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
   return(Combinations)
 }
 
+
+## TrajectoryAnalysis
+
+## add roxygen comments
+#' @title TrajectoryAnalysis
+#' @description Trajectory analysis of the specified dataset. Identifies clusters of proteins with similar temporal dynamics based on their derivatives.
+#' @param dataset The dataset to be analyzed. Must contain columns "Protein", "Intensity", and a time column.
+#' @param timecol The name of the time column in the dataset. Input as a string.
+#' @param k The number of knots for the GAM spline. Default is 5.
+#' @param deepSplit The deepSplit parameter for dynamic tree cutting. Default is 3
+#' @param minClusterSize The minimum cluster size for dynamic tree cutting. Default is 50.
+#' @return A list object containing the GAM models, the predicted dynamics, the derivatives,
+#' the cluster assignments, the mean derivative trajectories for each cluster, and plots of the Eigentrajectories for each cluster.
+TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minClusterSize = 50){
+
+  ## ensym timecol
+  timecol <- rlang::ensym(timecol)
+
+  GAMData <- dataset
+
+  models <- list()
+
+  f <- stats::as.formula(paste("Intensity ~ s(", timecol, ", k = ", k, ")"))
+
+  PoIs <- unique(dataset$Protein)
+  for(PoI in PoIs){
+
+    modeldata <- GAMData |>
+      dplyr::filter(Protein == PoI) |>
+      ## filter for missing values in intensiy or timecol
+      dplyr::filter(!is.na(Intensity) & !is.na(!!timecol))
+
+    model <- mgcv::gam(
+      f,
+      data = modeldata,
+      method = "REML"
+    )
+
+
+    ## save models
+    models[[PoI]] <- model
+  }
+
+  ## Time series
+  TimeGrid <- tibble::tibble(
+    !!timecol := seq(
+      min(GAMData[[timecol]]),
+      max(GAMData[[timecol]]),
+      length.out = 100
+    )
+  )
+
+  ## Helper function to predict smoothed population-level trajectories for each protein and status group
+
+  predict_population <- function(model,
+                                 time_grid) {
+
+
+    newdata <- time_grid
+
+    prediction <- stats::predict(
+      model,
+      newdata = newdata,
+      se.fit = TRUE)
+
+
+    results <- tibble::tibble(
+      !!timecol := time_grid[[timecol]],
+      Prediction = prediction$fit
+    )
+
+
+    return(results)
+
+  }
+
+
+
+  Dynamics <- data.frame()
+  for(PoI in PoIs){
+
+    model <- models[[PoI]]
+
+    ## predict population-level smooths
+    predictions <- predict_population(model, TimeGrid)
+
+    predictions$Protein <- PoI
+    Dynamics <- rbind(Dynamics, predictions)
+  }
+
+
+  ## We will calculate derivatives non-analytically (for lack of math/ coding skills)
+  Derivatives <- Dynamics %>%
+    dplyr::arrange(Protein, !!timecol) %>%
+    dplyr::group_by(Protein) %>%
+    dplyr::mutate(Derivative =
+                    (Prediction - dplyr::lag(Prediction)) /
+                    (!!timecol - dplyr::lag(!!timecol))) %>%
+    dplyr::ungroup() |>
+    tidyr::drop_na(Derivative)
+
+  ## Cluster by overall trajectories of the derivatives (No Status term here)
+  Derivatives_cluster <- Derivatives %>%
+    dplyr::group_by(Protein, !!timecol) %>%
+    dplyr::summarise(
+      Derivative = mean(Derivative),
+      .groups = "drop")
+
+  ### Convert to matrix
+  Derivative_matrix <-
+    Derivatives_cluster %>%
+    dplyr::select(Protein, !!timecol, Derivative) %>%
+    tidyr::pivot_wider(names_from = !!timecol, values_from = Derivative) %>%
+    tibble::column_to_rownames("Protein") |>
+    as.matrix()
+
+  ## Scale the derivatives to model shapes, not magnitude
+  Derivative_scaled <-
+    t(scale(t(Derivative_matrix)))
+
+
+  cor_matrix <- stats::cor(t(Derivative_scaled), method = "pearson")
+
+
+  dist_matrix <- stats::as.dist(1 - cor_matrix)
+
+  ## cluster
+  hc <- stats::hclust(dist_matrix, method = "average")
+
+  ## assign clusters
+  clusters <- dynamicTreeCut::cutreeDynamic(
+    dendro = hc,
+    distM = as.matrix(dist_matrix),
+    minClusterSize = minClusterSize,
+    deepSplit = deepSplit
+  )
+
+  Cluster_assignment <- tibble::tibble(Protein = rownames(Derivative_matrix), Cluster = clusters)
+
+  ## Put proteins that dont change over time (PoIsNotTime) in one Cluster (The last cluster + 1)
+  Cluster_assignment <- rbind(Cluster_assignment)
+
+  ## add cluster assignment to derivatives
+  Derivatives_clustered <- Derivatives %>%
+    dplyr::left_join(Cluster_assignment, by = "Protein")
+
+  ## Calculate derivative means for each cluster over time
+  PlotData <- Derivatives_clustered %>%
+    dplyr::group_by(Cluster, !!timecol) %>%
+    dplyr::summarise(MeanDerivative = mean(Derivative),
+                     .groups = "drop")
+
+  ## Plot mean derivative trajectories for each cluster
+  DerivativesPlot <- ggplot2::ggplot(PlotData, ggplot2::aes(!!timecol, MeanDerivative, colour = factor(Cluster))) +
+    ggplot2::geom_line(linewidth = 1.2) +
+    ggplot2::theme_classic()
+
+
+  # --- Calculate Eigentrajectories for each cluster --- #
+  EigenTrajectories <- list()
+
+  Clusters <- unique(Cluster_assignment$Cluster)
+
+  for(i in 1:length(Clusters)){
+
+    cluster <- Clusters[i]
+    PoIs <- Cluster_assignment %>% dplyr::filter(Cluster == cluster) %>% dplyr::pull(Protein) %>% unique()
+
+    ## Calculate Eigentrajectories
+    Cluster_data <- Dynamics |>
+      dplyr::filter(Protein %in% PoIs) |>
+      dplyr::group_by(Protein, !!timecol) |>
+      dplyr::summarise(MeanPred = mean(Prediction, na.rm = TRUE), .groups = "drop")
+
+    ## check if mean prediction correlates positiveley with time (for later)
+    cor_test <- stats::cor.test(Cluster_data[[timecol]], Cluster_data$MeanPred)
+    correlation <- cor_test$estimate
+
+    traj_matrix <- Cluster_data %>%
+      tidyr::pivot_wider(
+        names_from = !!timecol,
+        values_from = MeanPred
+      ) %>%
+      tibble::column_to_rownames("Protein") %>%
+      as.matrix()
+
+    #scale the matrix
+    traj_scaled <- t(scale(t(traj_matrix)))
+
+    print(cluster)
+
+    ## run PCA
+    pca <- stats::prcomp(
+      traj_scaled,
+      center = FALSE,
+      scale. = FALSE
+    )
+
+    ## extract Eigentrajectory (loading of first PC)
+    eigentrajectory <- pca$rotation[,1]
+    eigentrajectory <- eigentrajectory |> data.frame() |>
+      tibble::rownames_to_column(as.character(timecol)) |>
+      dplyr::mutate(!!timecol := as.numeric(!!timecol)) |>
+      ## multiply by pca$sdev[1] to get z-score values
+      dplyr::mutate(eigentrajectory = eigentrajectory * pca$sdev[1])
+
+    ## check if the Eigentrajectory is positively correlated with time, if not, flip the sign to match the direction in the real data space
+    eigencorrelation <- stats::cor.test(eigentrajectory[[timecol]], eigentrajectory$eigentrajectory)
+    eigencorrelation <- eigencorrelation$estimate
+
+    ## if correlation and eigencorrelation have different signs, flip the sign of the eigentrajectory
+    if(sign(correlation) != sign(eigencorrelation)){
+      eigentrajectory$eigentrajectory <- -1 * eigentrajectory$eigentrajectory
+    }
+
+    ## calculare correlation between every protein's trajectory and the Eigentrajectory
+    cor_results <- apply(traj_scaled, 1, function(x) stats::cor.test(x, eigentrajectory$eigentrajectory))
+    cor_results <- lapply(cor_results, function(x) x$estimate)
+    ## make dataframe of proteins and correlation
+    cor_results <- data.frame(Protein = names(cor_results), Correlation = unlist(cor_results))
+
+    ## Loop through correlation cutoffs and filter proteins based on variance explained by Eigentrajectory
+    Cutoffvalues <- seq(0.5, 0.9, by = 0.01)
+    Cutoffsolutions <- data.frame()
+    for(cutoff in Cutoffvalues){
+      PoIs_correlated <- cor_results %>% dplyr::filter(Correlation > cutoff) %>% dplyr::pull(Protein)
+
+      ## calcualte PCA
+      pca_cutoff <- stats::prcomp(
+        traj_scaled[PoIs_correlated,],
+        center = FALSE,
+        scale. = FALSE
+      )
+
+      ## calculate variance explained by first PC
+      var_explained <- pca_cutoff$sdev[1]^2 / sum(pca_cutoff$sdev^2)
+      ProteinsIncluded = length(PoIs_correlated)
+      ProteinsExcluded = length(PoIs) - length(PoIs_correlated)
+
+      Metric  <- var_explained * sqrt(ProteinsIncluded / length(PoIs))
+
+      ## store results in dataframe
+      Cutoffsolutions <- rbind(Cutoffsolutions, data.frame(Cutoff = cutoff , VarianceExplained = var_explained, ProteinsIncluded = ProteinsIncluded, ProteinsExcluded = ProteinsExcluded, Metric = Metric))
+    }
+
+    BestCutOff <- Cutoffsolutions %>% dplyr::filter(Metric == max(Metric)) %>% dplyr::pull(Cutoff) |> utils::head(1)
+
+    ## apply best cutoff to filter proteins
+    PoIs_correlated <- cor_results %>% dplyr::filter(Correlation > BestCutOff) |> dplyr::pull(Protein)
+
+    ## put Eigentrajectory into list
+    EigenTrajectories[[paste0("Cluster_", cluster)]]$eigentrajectory <- eigentrajectory
+
+    ## Compute PCA scores as a metric of "cluster membership"
+    Cluster_membership <-
+      tibble::tibble(
+        Protein = PoIs_correlated,
+        Cluster = cluster,
+        PC1 = pca$x[PoIs_correlated,1],
+        PC2 = pca$x[PoIs_correlated,2]
+      ) %>% dplyr::mutate(
+        abs_PC1 = abs(PC1)
+      ) %>%
+      dplyr::arrange(dplyr::desc(abs_PC1))
+
+    ## add cluster membership to Eigentrajectory list
+    EigenTrajectories[[paste0("Cluster_", cluster)]]$Cluster_membership <- Cluster_membership
+    EigenTrajectories[[paste0("Cluster_", cluster)]]$Proteins <- PoIs_correlated
+    EigenTrajectories[[paste0("Cluster_", cluster)]]$PCA <- pca
+
+  }
+
+  PlotList <- list()
+  ## Plot Eigentrajectories
+  for(i in 1:length(EigenTrajectories)){
+
+    cluster <- names(EigenTrajectories)[i]
+    eigentrajectory <- EigenTrajectories[[i]]$eigentrajectory
+
+    ## Get z-scored trajectories for every protein in the cluster
+    PoIs <- EigenTrajectories[[i]]$Proteins
+
+    ## extract the trajectories for these proteins
+    Cluster_data <- Dynamics |>
+      dplyr::filter(Protein %in% PoIs) |>
+      ## z-score the predictions for each protein
+      dplyr::group_by(Protein) |>
+      dplyr::mutate(Prediction = scale(Prediction)) |>
+      dplyr::group_by(Protein, !!timecol) |>
+      dplyr::summarise(MeanPred = mean(Prediction, na.rm = TRUE), .groups = "drop") |>
+      ## merge with cluster assignment
+      dplyr::left_join(Cluster_assignment, by = "Protein") |>
+      ## filter for non NA clusters (to filter out non correlating proteins)
+      dplyr::filter(!is.na(Cluster))
+
+    ## Plot Eigentrajectory
+    Plot <- ggplot2::ggplot(eigentrajectory, ggplot2::aes(x = !!timecol, y = eigentrajectory)) +
+      ## add the individual trajectories for each protein in the cluster
+      ggplot2::geom_line(data = Cluster_data, ggplot2::aes(x = !!timecol, y = MeanPred, group = Protein ), alpha = 0.5, color = "grey") +
+      ## add the eigentrajectory
+      ggplot2::geom_line(linewidth = 1.5) +
+      ggplot2::theme_classic() +
+      ggplot2::labs(title = paste0("Eigentrajectory for ", cluster),
+                    x = timecol,
+                    y = "Z-score")
+
+    PlotList[[cluster]] <- Plot
+
+
+  }
+
+  ## sort PlotList alphabetcially
+  PlotList <- PlotList[order(names(PlotList))]
+
+  EigenTrajectoriesPlot <- ggpubr::ggarrange(plotlist = PlotList, ncol = 2, nrow = 3, common.legend = T)
+
+  output <- list(
+    Dynamics = Dynamics,
+    Derivatives = Derivatives,
+    Cluster_assignment = Cluster_assignment,
+    DerivativesPlot = DerivativesPlot,
+    EigenTrajectories = EigenTrajectories,
+    EigenTrajectoriesPlot = EigenTrajectoriesPlot
+  )
+
+  return(output)
+
+}
 
 ## Machine learning
 
@@ -6607,3 +6935,5 @@ InteractivePlotSelector <- function(plot_list, labels = NULL, height = "500px") 
     htmltools::tags$script(htmltools::HTML(js_code))
   ))
 }
+
+
