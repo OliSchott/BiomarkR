@@ -42,6 +42,7 @@
 #' @import glmnet
 #' @import BiocGenerics
 #' @import logistf
+#' @import mgcv
 
 ## Data Import and Management
 ## add roxygen comments
@@ -4422,6 +4423,7 @@ BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence
 #' @param minClusterSize The minimum cluster size for dynamic tree cutting. Default is 50.
 #' @return A list object containing the GAM models, the predicted dynamics, the derivatives,
 #' the cluster assignments, the mean derivative trajectories for each cluster, and plots of the Eigentrajectories for each cluster.
+#' @export
 TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minClusterSize = 50){
 
   ## ensym timecol
