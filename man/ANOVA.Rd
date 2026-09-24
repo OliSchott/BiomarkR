@@ -4,19 +4,17 @@
 \alias{ANOVA}
 \title{ANOVA}
 \usage{
-ANOVA(dataset, plotname = "", clustDist = "euclidean", method = "unsupervised")
+ANOVA(dataset, plotname = "", covariates = NULL)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
 
 \item{plotname}{The name to be displayed on created plots}
 
-\item{clustDist}{The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")}
-
-\item{method}{The method to be used for the Heatmap (unsupervised, supervised)}
+\item{covariates}{A character vector of covariates to be included in the model. Example: c("Age","Sex")> Adding covariates will perform a Type III Multi-way ANOVA}
 }
 \value{
-A list object containing the results of the ANOVA, the significant features and a heatmap
+A list object containing the results of the ANOVA, the significant features and a volcano plot
 }
 \description{
 This function performs differential expression analysis using an ANOVA.

@@ -623,39 +623,71 @@ nObsPerGroup <- function(dataset, groupVar, n = 10) {
 }
 
 ## assign_colors
-## a function to assign colors from a Brewer’s palette to entries in a vector
+## a function to assign colors to entries in a vector
 ## add roxygen comments
 #' @title assign_colors
-#' @description This function assigns colors from different pellets to a list of labels
-#' @param unique_entries A vector of unique entries (like unique(dataset$Status))
-#' @param palette Color pellets c("custom_vibrant", "viridis", "plasma", "magma", "inferno")
+#' @description This function assigns colors to entries in a vector
+#' @param chars A vector of unique entries (like unique(dataset$Status))
 #' @return A color mapping
 #' @export
-assign_colors <- function(labels, palette = "custom_vibrant") {
-  labels <- unique(labels)
-  n <- length(labels)
+assign_colors <- function(chars) {
+  # 1. Helper function: Van der Corput sequence
+  vdc <- function(n) {
+    if (n == 0) return(0)
+    res <- 0; f <- 0.5
+    while (n > 0) { res <- res + (n %% 2) * f; n <- n %/% 2; f <- f / 2 }
+    return(res)
+  }
 
-  # Generate colors
-  colors <- switch(
-    palette,
-    "custom_vibrant" = rep(c("#FFAA00",  # golden orange
-                        "#9932CC",  # purple (avoid bluish ones)
-                        "#00C19F",  # teal / sea green
-                        "#ADFF2F",  # lime green (replaces yellow)
-                        "#8B8000",  # olive
-                        "#FF69B4",  # hot pink
-                        "#A0522D",  # sienna brown
-                        "#40E0D0"   # turquoise (on the greenish side)
-    ), length.out = n),
-    "viridis"   = viridisLite::viridis(n),
-    "plasma"    = viridisLite::plasma(n),
-    "magma"     = viridisLite::magma(n),
-    "inferno"   = viridisLite::inferno(n),
-    stop("Unknown palette")
+  unique_chars <- unique(chars)
+  n_colors <- length(unique_chars)
+
+  # 2. Generate the maximally spaced fractions
+  fractions <- sapply(0:(n_colors - 1), vdc)
+
+  # 3. Define the RYB wheel
+  ryb_wheel <- c(
+    "#5E27F2", "#9926D1", "#C421A1", "#E02424",
+    "#F06522", "#F59220", "#FFC933", "#FFEA2E",
+    "#B1F22C", "#58C738", "#45A8A8", "#1B2BC4", "#5E27F2"
   )
 
-  # Return named vector
-  setNames(colors, labels)
+  # 4. Interpolate and get base RGB values
+  ryb_ramp <- colorRamp(ryb_wheel)
+  rgb_matrix <- ryb_ramp(fractions)
+
+  # 5. Convert RGB to HSV to easily manipulate brightness
+  # rgb2hsv expects RGB columns, so we transpose the matrix
+  hsv_matrix <- rgb2hsv(t(rgb_matrix), maxColorValue = 255)
+  # 6. Group entries into chunks of 8 using integer division
+  # 0:(n_colors - 1) creates indices: 0,1,2...
+  # %/% 8 creates chunks: 0 (1-8), 1 (9-16), 2 (17-24), etc.
+  chunks <- (0:(n_colors - 1)) %/% 8
+
+  # Cycle through 3 tiers of brightness/saturation (Dark -> Normal -> Neon)
+  # %% 3 ensures that if you have more than 24 items, the cycle repeats
+  tier_index <- (chunks %% 2) + 1
+
+  # Define our multipliers for Value (Brightness) and Saturation
+  v_multipliers <- c(0.85, 0.8) # Brightest, Normal, Darker,
+  s_multipliers <- c(0.9, 0.5) # Maximum Neon, Normal, Muted
+
+  # Apply the multipliers to the V and S rows of the HSV matrix
+  hsv_matrix["v", ] <- hsv_matrix["v", ] * v_multipliers[tier_index]
+  hsv_matrix["s", ] <- hsv_matrix["s", ] * s_multipliers[tier_index]
+
+  # Cap values at 1.0 just in case
+  hsv_matrix["v", ] <- pmin(hsv_matrix["v", ], 1)
+  hsv_matrix["s", ] <- pmin(hsv_matrix["s", ], 1)
+
+  # 7. Convert modified HSV back to Hex codes
+  hex_colors <- hsv(h = hsv_matrix["h", ],
+                    s = hsv_matrix["s", ],
+                    v = hsv_matrix["v", ])
+
+  # 8. Map to characters
+  palette <- setNames(hex_colors, unique_chars)
+  return(palette[chars])
 }
 
 ## Imputation of missing value (default method = "mean")
@@ -1518,24 +1550,24 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
       dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
 
-    VulconaoPlotData <- merge(TResults, FoldChangeData, by = "Protein") %>%
+    VolcanoPlotData <- merge(TResults, FoldChangeData, by = "Protein") %>%
       dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Volcano plot of results
-    vulcanoPlot <- ggplot2::ggplot(data = VulconaoPlotData) +
+    VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "NotSignificant"),
+        data = subset(VolcanoPlotData, Direction == "NotSignificant"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "NotSignificant")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Up"),
+        data = subset(VolcanoPlotData, Direction == "Up"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Up")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Down"),
+        data = subset(VolcanoPlotData, Direction == "Down"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Down")
       ) +
       ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
@@ -1543,7 +1575,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
       ## Add Protein names using ggrepel
       ggrepel::geom_text_repel(
-        data = subset(VulconaoPlotData, log10adjustP > 1.3),
+        data = subset(VolcanoPlotData, log10adjustP > 1.3),
         ggplot2::aes(label = Gene, x = FC, y = log10adjustP),
         box.padding = 0.3,
         point.padding = 0.3,
@@ -1599,31 +1631,31 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
       dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
 
-    VulconaoPlotData <- merge(TResults, FoldChangeData, by = "Peptide") %>%
+    VolcanoPlotData <- merge(TResults, FoldChangeData, by = "Peptide") %>%
       dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Volcano plot of results
-    vulcanoPlot <- ggplot2::ggplot(data = VulconaoPlotData) +
+    VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "NotSignificant"),
+        data = subset(VolcanoPlotData, Direction == "NotSignificant"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "NotSignificant")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Up"),
+        data = subset(VolcanoPlotData, Direction == "Up"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Up")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Down"),
+        data = subset(VolcanoPlotData, Direction == "Down"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Down")
       ) +
       ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
       ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
       ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
       ggplot2::geom_text(
-        data = subset(VulconaoPlotData, log10adjustP > 1.3),
+        data = subset(VolcanoPlotData, log10adjustP > 1.3),
         ggplot2::aes(label = Gene, x = FC, y = log10adjustP),
         vjust = 0.5, hjust = -0.2, size = 3, angle = 30
       ) +
@@ -1654,7 +1686,7 @@ TTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
   Output <- list()
   Output$raw <- TResults
   Output$Significant <- TSignificantFeatures
-  Output$Vulcanoplot <- vulcanoPlot
+  Output$Volcanoplot <- VolcanoPlot
   Output$Heatmap <- Heatmap
 
   return(Output)
@@ -1722,24 +1754,24 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
       dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
 
-    VulconaoPlotData <- merge(WResults, FoldChangeData, by = "Protein") %>%
+    VolcanoPlotData <- merge(WResults, FoldChangeData, by = "Protein") %>%
       dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Volcano plot of results
-    vulcanoPlot <- ggplot2::ggplot(data = VulconaoPlotData) +
+    VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "NotSignificant"),
+        data = subset(VolcanoPlotData, Direction == "NotSignificant"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "NotSignificant")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Up"),
+        data = subset(VolcanoPlotData, Direction == "Up"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Up")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Down"),
+        data = subset(VolcanoPlotData, Direction == "Down"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Down")
       ) +
       ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
@@ -1747,7 +1779,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
       ## Add Protein names using ggrepel
       ggrepel::geom_text_repel(
-        data = subset(VulconaoPlotData, log10adjustP > 1.3),
+        data = subset(VolcanoPlotData, log10adjustP > 1.3),
         ggplot2::aes(label = Gene, x = FC, y = log10adjustP),
         box.padding = 0.3,
         point.padding = 0.3,
@@ -1803,31 +1835,31 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
       tidyr::pivot_wider(names_from = "Status", values_from = "meanInt") %>%
       dplyr::mutate(FC = (.[[Status1]] - .[[Status2]]))
 
-    VulconaoPlotData <- merge(WResults, FoldChangeData, by = "Peptide") %>%
+    VolcanoPlotData <- merge(WResults, FoldChangeData, by = "Peptide") %>%
       dplyr::mutate(Direction = ifelse(p.adj > 0.05, "NotSignificant", ifelse(FC < 0, "Down", "Up")))
 
     ## Volcano plot of results
-    vulcanoPlot <- ggplot2::ggplot(data = VulconaoPlotData) +
+    VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "NotSignificant"),
+        data = subset(VolcanoPlotData, Direction == "NotSignificant"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "NotSignificant")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Up"),
+        data = subset(VolcanoPlotData, Direction == "Up"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Up")
       ) +
       ggplot2::geom_point(
         size = 3.5, shape = 21,
-        data = subset(VulconaoPlotData, Direction == "Down"),
+        data = subset(VolcanoPlotData, Direction == "Down"),
         ggplot2::aes(x = FC, y = log10adjustP, fill = "Down")
       ) +
       ggplot2::scale_fill_manual(values = c("Up" = "red", "Down" = "blue", "NotSignificant" = "grey")) +
       ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
       ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
       ggplot2::geom_text(
-        data = subset(VulconaoPlotData, log10adjustP > 1.3),
+        data = subset(VolcanoPlotData, log10adjustP > 1.3),
         ggplot2::aes(label = Gene, x = FC, y = log10adjustP),
         vjust = 0.5, hjust = -0.2, size = 3, angle = 30
       ) +
@@ -1860,7 +1892,7 @@ WTest <- function(dataset, plotname = "", method = "unsupervised", clustDist = "
   Output <- list()
   Output$raw <- WResults
   Output$Significant <- WilcoxSignificantFeatures
-  Output$Vulcanoplot <- vulcanoPlot
+  Output$Volcanoplot <- VolcanoPlot
   Output$Heatmap <- Heatmap
 
   return(Output)
@@ -1948,16 +1980,16 @@ LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"
     dplyr::mutate(FC = !!rlang::sym(Status2) - !!rlang::sym(Status1)) %>%
     dplyr::select(Protein, FC)
 
-  VulcanoPlotData <- GLMResults %>%
+  VolcanoPlotData <- GLMResults %>%
     dplyr::left_join(FCData, by = "Protein")  %>%
     dplyr::mutate(log10.p.value.adj = -log10(p.value.adj))
 
   ## give a warning if there are infinite log10.p.value.adj
-  if(any(is.infinite(VulcanoPlotData$log10.p.value.adj))){
+  if(any(is.infinite(VolcanoPlotData$log10.p.value.adj))){
     warning("There are infinite log10.p.value.adj values. These will be replaced with 1.5 times the maximum log10.p.value.adj that is not infinite.")
   }
 
-  VulcanoPlotData <- VulcanoPlotData %>%
+  VolcanoPlotData <- VolcanoPlotData %>%
     dplyr::mutate(
       log10.p.value.adj = ifelse(
         is.infinite(log10.p.value.adj),
@@ -1975,21 +2007,21 @@ LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"
     dplyr::mutate(Gene = stringr::str_split_i(Protein, "_", 2))
 
   ## Volcano plot
-  VulcanoPlot <- ggplot2::ggplot(data = VulcanoPlotData) +
+  VolcanoPlot <- ggplot2::ggplot(data = VolcanoPlotData) +
     ggplot2::geom_point(
       size = 3.5, shape = 21,
-      data = subset(VulcanoPlotData, Direction == "NotSignificant"),
+      data = subset(VolcanoPlotData, Direction == "NotSignificant"),
       ggplot2::aes(x = estimate, y = -log10(p.value.adj)),
       fill = "grey"
     ) +
     ggplot2::geom_point(
       size = 3.5, shape = 21,
-      data = subset(VulcanoPlotData, Direction == "Up"),
+      data = subset(VolcanoPlotData, Direction == "Up"),
       ggplot2::aes(x = estimate, y = -log10(p.value.adj), fill = FC)
     ) +
     ggplot2::geom_point(
       size = 3.5, shape = 21,
-      data = subset(VulcanoPlotData, Direction == "Down"),
+      data = subset(VolcanoPlotData, Direction == "Down"),
       ggplot2::aes(x = estimate, y = -log10(p.value.adj), fill = FC)
     ) +
     ggplot2::scale_fill_gradient2(
@@ -2000,7 +2032,7 @@ LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"
     ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
     ggplot2::theme_light(base_size = 13) +
     ggrepel::geom_text_repel(
-      data = subset(VulcanoPlotData, p.value.adj < 0.05 & (estimate > 0.2 | estimate < -0.2)),
+      data = subset(VolcanoPlotData, p.value.adj < 0.05),
       ggplot2::aes(x = estimate, y = -log10(p.value.adj), label = Gene),
       size = 4, max.overlaps = 10
     ) +
@@ -2013,7 +2045,7 @@ LTest <- function(dataset, plotname = "", Covariates = NULL, p.adj.method = "BH"
 
   return(list(
     GLMResults = GLMResults,
-    VulcanoPlot = VulcanoPlot,
+    VolcanoPlot = VolcanoPlot,
     Significant = Significant
   ))
 }
@@ -2161,178 +2193,99 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 #' @description This function performs differential expression analysis using an ANOVA.
 #' @param dataset The dataset to be tested
 #' @param plotname The name to be displayed on created plots
-#' @param clustDist The distance metric to be used for clustering in the Heatmap ("euclidean", "maximum", "man-hattan", "canberra", "binary", "minkowski", "pearson", "spearman", "kendall")
-#' @param method The method to be used for the Heatmap (unsupervised, supervised)
-#' @return A list object containing the results of the ANOVA, the significant features and a heatmap
+#' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex")> Adding covariates will perform a Type III Multi-way ANOVA
+#' @return A list object containing the results of the ANOVA, the significant features and a volcano plot
 #' @export
-ANOVA <- function(dataset, plotname= "", clustDist = "euclidean", method = "unsupervised"){
+ANOVA <- function(dataset, plotname= "", covariates = NULL){
+
+  options(contrasts = c("contr.sum", "contr.poly"))
 
   ## Initializing Dataframe
   datasetANOVA <- dataset
 
   ## Making the "Status" column into a factor
-  datasetANOVA$Status <- datasetANOVA$Status %>% as.factor()
+  datasetANOVA$Status <- as.factor(datasetANOVA$Status)
 
   ## Cheking if we are operating on Peptides or Proteins
-  if("Protein" %in% colnames(dataset)){
+  ## make formula, put stuts last
+  f <- stats::as.formula(paste("Intensity ~", paste(covariates, collapse = " + "), "+ Status"))
 
-    ## Running the ANOVA
-    ANOVAResults <<- datasetANOVA %>%
-      ## Preparing Dataframe
-      drop_na(Intensity) %>%
-      group_by(Protein) %>%
-      anova_test(Intensity ~ Status, detailed = T) %>%
-      magrittr::set_class(c("anova_test", "rstatix_test", "data.frame")) %>%
-      adjust_pvalue(method = "BH") %>%
-      separate(Protein, into = c("Uniprot", "Gene"), sep = "_", remove = F)
+  PoIs <- unique(dataset$Protein)
 
-    ANOVASignificantFeatures <<- ANOVAResults %>%
-      filter(p.adj < 0.05) %>%
-      arrange(p.adj)
-
-
-  }
-  if("Peptide" %in% colnames(dataset)){
-
-    ## Running the ANOVA
-    ANOVAResults <<- datasetANOVA %>%
-      ## Preparing Dataframe
-      drop_na(Intensity) %>%
-      group_by(Peptide) %>%
-      anova_test(Intensity ~ Status, detailed = T) %>%
-      magrittr::set_class(c("anova_test", "rstatix_test", "data.frame")) %>%
-      adjust_pvalue(method = "BH") %>%
-      separate(Protein, into = c("Uniprot", "Gene"), sep = "_", remove = F)
-
-    ANOVASignificantFeatures <- ANOVAResults %>%
-      filter(p.adj < 0.05) %>%
-      arrange(p.adj)
-
-  }
+  Models <- list()
   ## Running the ANOVA
-  ANOVAResults <- datasetANOVA %>%
-    ## Preparing Dataframe
-    drop_na(Intensity) %>%
-    group_by(Protein) %>%
-    anova_test(Intensity ~ Status, detailed = T) %>%
-    magrittr::set_class(c("anova_test", "rstatix_test", "data.frame")) %>%
-    adjust_pvalue(method = "BH") %>%
-    separate(Protein, into = c("Uniprot", "Gene"), sep = "_", remove = F)
-
-  ANOVASignificantFeatures <- ANOVAResults %>%
-    filter(p.adj < 0.05) %>%
-    arrange(- p.adj)
-
-    ## creating heat map Data
-    if("Protein" %in% colnames(dataset)){
-
-      HeatMapData <- dataset %>%
-        filter(Protein %in% ANOVASignificantFeatures$Protein) %>%
-        group_by(Protein) %>%
-        mutate(Intensity = scale(Intensity, center = TRUE, scale = TRUE))
-
-      ## Quantitative heat map data
-      HeatMapDataQuant <- HeatMapData %>%
-        pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
-        select(contains("_")) %>%
-        t() %>% as.matrix()
-
-      ## clinical heat map data
-      HeatMapDataClin <- HeatMapData %>%
-        pivot_wider(names_from = "Protein", values_from = "Intensity") %>%
-        select(!contains("_"))
-    }
-    if("Peptide" %in% colnames(dataset)){
-
-      HeatMapData <- dataset %>%
-        filter(Peptide %in% ANOVASignificantFeatures$Peptide) %>%
-        group_by(Peptide) %>%
-        mutate(Intensity = scale(Intensity, center = TRUE, scale = TRUE))
-
-      ## Quantitative heat map data
-      HeatMapDataQuant <- HeatMapData %>%
-        pivot_wider(names_from = "Peptide", values_from = "Intensity") %>%
-        select(contains("_")) %>%
-        t() %>% as.matrix()
-
-      ## clinical heat map data
-      HeatMapDataClin <- HeatMapData %>%
-        pivot_wider(names_from = "Peptide", values_from = "Intensity") %>%
-        select(!contains("_"))
-
-    }
-
-    ## Annotations
-    ## for now only status is annotated
-    ## maybe i can find a general way to annotate all clinical variables
-    "colnames(HeatMapDataClin[1]) = HeatMapDataClin[1] works; need to find a way to generalize"
-
-    Annotation <- HeatmapAnnotation(
-      Status = HeatMapDataClin$Status
-    )
-
-    if(method == "supervised" | method == "Supervised"){
-
-      ANOVAHeatMap <- ComplexHeatmap::Heatmap(HeatMapDataQuant,
-
-                                              ## Annotation stuff
-                                              top_annotation = Annotation,
-
-                                              ## clustering specifics
-                                              ## Clustering columns
-                                              cluster_columns = TRUE,
-                                              clustering_distance_columns = clustDist,
-
-                                              ## clustering Rows
-                                              cluster_rows = TRUE,
-                                              clustering_distance_rows = clustDist,
-                                              show_row_names = FALSE,
-
-                                              ## specify pacient status as main cluster
-                                              column_split = HeatMapDataClin$Status,
-
-                                              ## Changing Legend title
-                                              name = "z-score Int",
-
-                                              ## naming Plot
-                                              column_title = paste(plotname,"Supervised Heat map clustered by", clustDist)
-      )
-
-
-    }
-    if(method == "unsupervised" | method == "Unsupervised"){
-
-      ANOVAHeatMap <- ComplexHeatmap::Heatmap(HeatMapDataQuant,
-
-                                              ## Annotations Stuff
-                                              top_annotation = Annotation,
-
-                                              ## clustering specifics
-                                              ## Clustering columns
-                                              cluster_columns = TRUE,
-                                              clustering_distance_columns = "euclidean",
-
-
-                                              ## clustering Rows
-                                              cluster_rows = TRUE,
-                                              clustering_distance_rows = clustDist,
-                                              show_row_names = FALSE,
-
-                                              ## Change legend title
-                                              name = "z-score Int",
-
-                                              ## naming Plot
-                                              column_title = paste("Unsupervised Heat map", plotname, "clustered by", clustDist)
-
-      )
-
+  for(i in 1:length(PoIs)){
+    PoI <- PoIs[i]
+    model <- stats::lm(f, data = datasetANOVA[datasetANOVA$Protein == PoIs[i],])
+    ANOVA <- car::Anova(model, type = 3)
+    ## put modelsum in list
+    Models[[PoI]] <- ANOVA
   }
+
+  ## extracting the terms and p values from the ANOVA results
+  ANOVAResults <- data.frame()
+  for(i in 1:length(PoIs)){
+    ANOVAResults <- rbind(ANOVAResults, data.frame(Protein = PoIs[i], Term = rownames(Models[[PoIs[i]]]),                                          SumSq = Models[[PoIs[i]]]$`Sum Sq`,
+                                                   Df = Models[[PoIs[i]]]$Df,                                          Fvalue = Models[[PoIs[i]]]$`F value`,
+                                                   pValue = Models[[PoIs[i]]]$`Pr(>F)`))
+  }
+
+  ## filter for relevant terms
+  ANOVAResults <- ANOVAResults |>
+    dplyr::filter(!Term %in% c("(Intercept)", "Residuals")) |>
+    dplyr::group_by(Term) |>
+    dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = "BH")) |>
+    dplyr::ungroup()
+
+  ## get number of significant terms per protein (for plotting)
+  Nterms <- ANOVAResults |>
+    dplyr::filter(adjPValue < 0.05) |>
+    dplyr::group_by(Protein) |>
+    ## concatenate term names
+    dplyr::summarise(NTerms = paste(Term, collapse = ", ")) |>
+    dplyr::filter(grepl("Status", NTerms))
+
+  ## Make Volcano Plot
+  PlotData <- ANOVAResults |>
+    dplyr::filter(grepl("Status", Term)) |>
+    dplyr::left_join(Nterms, by = "Protein") |>
+    dplyr::mutate(Significant = ifelse(adjPValue < 0.05, "Significant", "Not Significant")) |>
+    dplyr::mutate(Gene = stringr::str_split_i(Protein, "_", 2))
+
+  Volcanoplot <- ggplot2::ggplot(PlotData, ggplot2::aes(x = SumSq, y = -log10(adjPValue))) +
+    ## plot positive significant proteins
+    ggplot2::geom_point(data = subset(PlotData, adjPValue < 0.05), size = 3.5, shape = 21, ggplot2::aes(fill = NTerms)) +
+    ## plot non significant proteins
+    ggplot2::geom_point(data = subset(PlotData, adjPValue >= 0.05), size = 3.5, shape = 21, fill = "grey") +
+    ## aestethics
+    ## use blue to red gradient for significant proteins
+    ## make color scale from  -0.5 to 2
+    ggplot2::geom_hline(yintercept = -log10(0.05), alpha = 0.7, linetype = 2) +
+    ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
+    ggplot2::theme_light(base_size = 13) +
+    ggrepel::geom_text_repel(
+      data = subset(PlotData, adjPValue < 0.05), # Note: Changed 'dataset' to 'data' to prevent ggplot errors
+      ggplot2::aes(x = SumSq, y = -log10(adjPValue), label = Gene),
+      size = 4, max.overlaps = 20
+    ) +
+    ggplot2::theme_minimal(base_size = 20) +
+    ## draw border around plot
+    ggplot2::theme(panel.border = ggplot2::element_rect(color = "black", fill = NA, size = 1))+
+    ## add title
+    ggplot2::ggtitle(plotname) +
+    ggplot2::ylab("-log10(adjusted p-value)") +
+    ## put legend on bottom
+    ggplot2::theme(legend.position = "bottom") +
+    ## chage fill color to viridis
+    ggplot2::scale_fill_brewer(palette = "Accent")
+
   ## Preparing Output object
   Output <- list()
 
   Output$raw <- ANOVAResults
-  Output$Significant <- ANOVASignificantFeatures
-  Output$Heatmap <- ANOVAHeatMap
+  Output$plot <- Volcanoplot
+  Output$significant <- ANOVAResults |> dplyr::filter(adjPValue < 0.05)
+
 
   return(Output)
 }
@@ -2457,7 +2410,7 @@ LIMMA <- function(dataset, covariates = NULL, Group_var = NULL, plotname = "") {
     ggplot2::geom_hline(yintercept = -log10(0.01), alpha = 0.7, linetype = 2, col = "red") +
     ggplot2::theme_light(base_size = 13) +
     ggrepel::geom_text_repel(
-      dataset = subset(VolcanoPlotData, p.value.adj < 0.05 & (estimate > 0.5 | estimate < -0.19)),
+      dataset = subset(VolcanoPlotData, p.value.adj < 0.05),
       ggplot2::aes(x = estimate, y = -log10(p.value.adj), label = Gene),
       size = 4, max.overlaps = 5
     ) +
@@ -2843,7 +2796,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
   if("Protein" %in% colnames(dataset)){
     ## Combine the two dataframes
-    Vulcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Protein" %in% colnames(dataset),"Protein", "Peptide")) %>%
+    Volcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Protein" %in% colnames(dataset),"Protein", "Peptide")) %>%
       ## Add AUC to 0.5 if value is less than 0.5
       dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
       ## make gene column for later plot annotation
@@ -2856,7 +2809,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
   if("Peptide" %in% colnames(dataset)){
     ## Combine the two dataframes
-    Vulcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Peptide" %in% colnames(dataset),"Peptide", "Peptide")) %>%
+    Volcanoplotdata <- merge(Diff, AUCResults, by = ifelse("Peptide" %in% colnames(dataset),"Peptide", "Peptide")) %>%
       ## Add AUC to 0.5 if value is less than 0.5
       dplyr::mutate(AUC = ifelse(AUC < 0.5, 0.5 + 0.5- AUC, AUC)) %>%
       ## make gene column for later plot annotation
@@ -2867,8 +2820,8 @@ AUCs <- function(dataset, PoIs, plotname = "") {
 
   }
 
-  VulcanoPlot <- ## volcano plot of Results
-    ggplot2::ggplot(Vulcanoplotdata, aes(x = Diff, y = AUC)) +
+  VolcanoPlot <- ## volcano plot of Results
+    ggplot2::ggplot(Volcanoplotdata, aes(x = Diff, y = AUC)) +
     ggplot2::geom_point(aes(col = ifelse(Direction == "Up", "blue", "red"))) +
     ggrepel::geom_text_repel(aes(label = Gene), box.padding = 0.5) +
     ggplot2::theme_minimal() +
@@ -2895,7 +2848,7 @@ AUCs <- function(dataset, PoIs, plotname = "") {
   Output <- list()
   Output$results <- AUCResults
   Output$plot <- AUCPlot
-  Output$VulcanoPlot <- VulcanoPlot
+  Output$VolcanoPlot <- VolcanoPlot
   Output$Histogram <- Histogram
   return(Output)
 }
@@ -4162,20 +4115,15 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
     dplyr::select(Sample, Protein, Intensity) %>%
     tidyr::pivot_wider(names_from = Protein, values_from = Intensity) %>%
     tibble::column_to_rownames(var = "Sample") %>%
-    as.matrix() %>%
-    t()
+    as.matrix()
 
   ## check if there are NA values in dataset$Intensity (error if so)
   if(any(is.na(TestData))){
     stop("The dataset contains NA values in the Intensity column. Please impute or remove them.")
   }
 
-  ## Calculate the correlation matrix (MEGENA)
-  cor_matrix <- MEGENA::calculate.correlation(
-    TestData,
-    method     = cor.method,
-    is.signed  = TRUE
-  )
+  ## Calculate the correlation matrix
+  cor_matrix <-cor(TestData, method = cor.method)
 
   ## check if cor_matrix is empty (give error if so)
   if(nrow(cor_matrix) == 0){
@@ -4184,6 +4132,7 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
 
   ## Filter edges by correlation cutoff
   edges <- cor_matrix %>%
+    data.frame() %>%
     dplyr::filter(abs(.data$rho) >= cutoff)
 
   ## Build igraph graph
@@ -4251,7 +4200,6 @@ CorrelationNetwork <- function(dataset, cutoff = 0.7, cor.method = "pearson"){
 #' @param allowInteractions Logical value indicating if interactions between PoIs should be included in the logistic regression model (default is FALSE)
 #' @return A list object containing the results of the Biomarker Panel analysis
 #' @export
-
 BiomarkerPanel <- function(dataset, PoIs, n, FalseNegativeWeight = 1, prevalence = "auto", Covariates = NULL, allowInteractions = F) {
 
   #------------------------------------------------------------
@@ -4454,6 +4402,27 @@ TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minCluste
     models[[PoI]] <- model
   }
 
+  ## extract ANOVA style results from the models for each protein
+  ModelResults <- data.frame()
+  for(PoI in PoIs){
+    model <- models[[PoI]]
+
+    ## extract ANOVA style results
+    anova_results <- mgcv::anova.gam(model)
+
+    ## extract p-value for the smooth term
+    p_value <- anova_results$s.table[1, "p-value"]
+
+
+    ## save results in a dataframe
+    ModelResults <- rbind(ModelResults, data.frame(protein = PoI, p_value = p_value))
+  }
+
+  ## correct for multiple testing using Benjamini-Hochberg
+  ModelResults$adj_p_value <- stats::p.adjust(ModelResults$p_value, method = "BH")
+
+  PoIsTime <- ModelResults |> dplyr::filter(adj_p_value < 0.05) |> dplyr::pull(protein)
+
   ## Time series
   TimeGrid <- tibble::tibble(
     !!timecol := seq(
@@ -4490,7 +4459,7 @@ TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minCluste
 
 
   Dynamics <- data.frame()
-  for(PoI in PoIs){
+  for(PoI in PoIsTime){
 
     model <- models[[PoI]]
 
@@ -4512,7 +4481,7 @@ TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minCluste
     dplyr::ungroup() |>
     tidyr::drop_na(Derivative)
 
-  ## Cluster by overall trajectories of the derivatives (No Status term here)
+  ## Cluster by overall trajectories of the derivatives
   Derivatives_cluster <- Derivatives %>%
     dplyr::group_by(Protein, !!timecol) %>%
     dplyr::summarise(
@@ -4549,9 +4518,6 @@ TrajectoryAnalysis <- function(dataset, timecol, k = k, deepSplit = 3, minCluste
   )
 
   Cluster_assignment <- tibble::tibble(Protein = rownames(Derivative_matrix), Cluster = clusters)
-
-  ## Put proteins that dont change over time (PoIsNotTime) in one Cluster (The last cluster + 1)
-  Cluster_assignment <- rbind(Cluster_assignment)
 
   ## add cluster assignment to derivatives
   Derivatives_clustered <- Derivatives %>%
@@ -5880,6 +5846,83 @@ STRING <- function(PoIs, STRINGBackground ,plotname = "", colPellet = "Reds"){
   return(Output)
 }
 
+## Gene set enrichment analysis
+## add roxygen comments
+#' @title GSEA
+#' @description Gene set enrichment analysis for the specified dataset.
+#' @param GeneList An ordered named vector of gene-level statistics (e.g., log fold changes) where names are gene symbols.
+#' @param plotname The name to be displayed on created plots
+#' @param collections A character vector specifying the collections to be used for GSEA (e.g., c("C2", "C5")). Default is c("C2", "C5").
+#' @return A list object containing the results of the GSEA analysis, the GSEA results table, and the GSEA enrichment plots.
+#' @export
+GSEA <- function(GeneList, plotname = "", collections = c("C2", "C5")){
+
+  # Enrichment for collection 2 (KEGG and Reactome)
+  # 1. Fetch your desired gene sets (e.g., Human Hallmark sets)
+  msig_t2g <- msigdbr::msigdbr(species = "Homo sapiens") |>
+    ## filter for relevant collections C2 and C5 are good defaults
+    dplyr::filter(gs_collection %in% collections) |>
+    dplyr::filter(!grepl("HP_", gs_name)) |>
+    dplyr::select(
+      gs_name,
+      gene_symbol
+    )
+
+  # 2. Run GSEA with the TERM2GENE argument supplied
+  gsea_results <- clusterProfiler::GSEA(GeneList, TERM2GENE = msig_t2g)
+
+  GSEATable <- gsea_results@result
+
+  ## return an empty object if nrow of GSEATable = 0 and exit
+  if(nrow(GSEATable) == 0){
+    return(list("GSEA" = gsea_results, "Table" = GSEATable, "Plots" = list()))
+  }
+
+  ## make enrichment Plot
+  PlotData <- gsea_results@result |>
+    dplyr::mutate(Category = stringr::str_split_i(Description, "_", 1)) |>
+    dplyr::mutate(Description = ID) |>
+    ## make lower case
+    dplyr::mutate(Description = tolower(Description)) |>
+    ## get rid of the category
+    dplyr::mutate(Description = stringr::str_replace(Description, paste0("^", tolower(Category), "_"), ""))
+
+  Categories <- unique(PlotData$Category)
+
+  Plots <- list()
+
+  ## establish min and max for NES
+  min_NES <- min(PlotData$NES, na.rm = TRUE)
+  max_NES <- max(PlotData$NES, na.rm = TRUE)
+
+  for(i in 1:length(Categories)){
+
+    category <- Categories[i]
+    plotdata <- PlotData |> dplyr::filter(Category == category)
+
+    Plot <- ggplot2::ggplot(plotdata) +
+      ggplot2::geom_col(ggplot2::aes(x = NES, y = stats::reorder(Description, -NES), fill = NES)) +
+      ## use red blue color pallet
+      ggplot2::scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0, limits = c(min_NES, max_NES)) +
+      ggplot2::theme_minimal(base_size = 20) +
+      ## draw box around plot
+      ggplot2::theme(panel.border = ggplot2::element_rect(color = "black", fill = NA, size = 1)) +
+      ggplot2::ggtitle(paste(plotname, category)) +
+      ggplot2::ylab("")
+
+    ## put plot in list
+    Plots[[category]] <- Plot
+  }
+
+  ## make sure all plots in plotlist have the same x axis limits
+  for(i in 1:length(Plots)){
+    Plots[[i]] <- Plots[[i]] + ggplot2::xlim(min_NES, max_NES)
+  }
+
+  output <- list("GSEA" = gsea_results, "Table" = GSEATable, "Plots" = Plots)
+  return(output)
+}
+
 ## KEGGEnrichment
 ## add roxygen comments
 #' @title KEGGEnrichment
@@ -6420,7 +6463,7 @@ TwoWayComparison <- function(dataset, plotname = ""){
 #' @param plotname The name to be displayed on the resulting plots
 #' @return A list object containing the results of the Kruskal test and the PCA, as well a UMAP analysis
 #' @export
-MultiWayComaprison <- function(dataset, plotname = ""){
+MultiWayComparison <- function(dataset, plotname = ""){
 
   ## Error when Data has  2 groups
   if(length(unique(dataset$Status)) == 2){
@@ -6727,14 +6770,6 @@ MEGENA <- function(dataset, plotname = "", cor.method = "pearson", direction = "
 
   return(output)
 }
-
-
-
-## ToDo
-## Data Manipulation
-## Machine learning
-## MISC
-
 ## Visualisation Utilities
 
 #' @title InteractivePlotSelector

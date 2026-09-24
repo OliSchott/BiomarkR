@@ -4,16 +4,14 @@
 \alias{assign_colors}
 \title{assign_colors}
 \usage{
-assign_colors(labels, palette = "custom_vibrant")
+assign_colors(chars)
 }
 \arguments{
-\item{palette}{Color pellets c("custom_vibrant", "viridis", "plasma", "magma", "inferno")}
-
-\item{unique_entries}{A vector of unique entries (like unique(dataset$Status))}
+\item{chars}{A vector of unique entries (like unique(dataset$Status))}
 }
 \value{
 A color mapping
 }
 \description{
-This function assigns colors from different pellets to a list of labels
+This function assigns colors to entries in a vector
 }

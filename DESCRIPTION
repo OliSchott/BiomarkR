@@ -1,49 +1,67 @@
 Package: BiomarkR
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Easy to use framework for proteomic data analysis.
+Version: 1.0.0.0
 Authors@R: 
     person("Oli", "Schott", , "oliver.schott@childrens.harvard.edu", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: Easy to use function for biomarker discovery in porteomics data.
 Imports: 
-  stats,
-  tidyverse,
-  readr,
-  readxl,
-  rstatix,
-  ComplexHeatmap,
-  InteractiveComplexHeatmap,
-  pROC,
-  caret,
-  rstatix,
-  stats,
-  circlize,
-  umap,
-  stringi,
-  gtools,
-  seqinr,
-  sva,
-  dendextend,
-  DESeq2,
-  DEGreport,
-  magick,
-  STRINGdb,
-  MLmetrics,
-  plotly,
-  ggrepel,
-  MEGENA,
-  Rtsne,
-  clusterProfiler,
-  igraph,
-  magrittr,
-  org.Hs.eg.db,
-  pathview
+    BiocGenerics,
+    caret,
+    circlize,
+    clusterProfiler,
+    ComplexHeatmap,
+    DEGreport,
+    dendextend,
+    DESeq2,
+    glmnet,
+    ggrepel,
+    gtools,
+    htmltools,
+    igraph,
+    impute,
+    InteractiveComplexHeatmap,
+    jsonlite,
+    limma,
+    logistf,
+    magick,
+    magrittr,
+    MEGENA,
+    mgcv,
+    MLmetrics,
+    org.Hs.eg.db,
+    pathview,
+    plotly,
+    pROC,
+    readr,
+    readxl,
+    rstatix,
+    Rtsne,
+    seqinr,
+    stats,
+    stringi,
+    STRINGdb,
+    sva,
+    tidyverse,
+    umap
 biocViews:
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+Remotes: 
+    bioc::BiocGenerics,
+    bioc::clusterProfiler,
+    bioc::ComplexHeatmap,
+    bioc::DEGreport,
+    bioc::DESeq2,
+    bioc::impute,
+    bioc::InteractiveComplexHeatmap,
+    bioc::limma,
+    bioc::MEGENA,
+    bioc::org.Hs.eg.db,
+    bioc::pathview,
+    bioc::sva
