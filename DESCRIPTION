@@ -61,7 +61,6 @@ Remotes:
     bioc::impute,
     bioc::InteractiveComplexHeatmap,
     bioc::limma,
-    bioc::MEGENA,
     bioc::org.Hs.eg.db,
     bioc::pathview,
     bioc::sva
