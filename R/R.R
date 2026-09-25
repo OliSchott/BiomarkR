@@ -3051,7 +3051,7 @@ BoxPlotsFeatures <- function(dataset, PoIs, plotname = "", pellet = "custom_vibr
   dataset <- dataset %>% arrange(Status)
 
   ## generate colors
-  colors <- assign_colors(unique(dataset$Status), palette = pellet)
+  colors <- assign_colors(unique(dataset$Status))
 
   if ("Protein" %in% colnames(dataset)) {
     BoxPlotData <- dataset %>%
@@ -3215,7 +3215,7 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
       colors <- colorRamp2(c(min_val, max_val), c(contColors[1], contColors[2]))
     } else {
       # For categorical data, use qualitative color palette
-      colors <- assign_colors(annotation_levels, ColPalette)
+      colors <- assign_colors(annotation_levels)
     }
 
     return(colors)
@@ -3385,7 +3385,7 @@ PCA <- function(dataset, nPcs = 3, plotname = "PCA", PoIs = "", plotTopNLoading 
 
   ## assign color
   if(! is.numeric(PCAPlotData$Status)){
-    colors <- BiomarkR::assign_colors(unique(PCAPlotData$Status), palette = ColPalette)
+    colors <- BiomarkR::assign_colors(unique(PCAPlotData$Status))
     }
 
 
@@ -3659,7 +3659,7 @@ UMAP <- function(dataset, plotname = "", show_ellipse = F,ColPalette = "custom_v
     base::merge(UmapDataClin, by = "Sample")
 
   ## assign colors to the status variable
-  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
+  colors <- assign_colors(unique(dataset$Status))
 
   ## Making Score plot
   UMAPPlot2D <- ggplot2::ggplot(UMAPPlotData2D, ggplot2::aes(x = PlotUMAP1, y = PlotUMAP2, colour = Status)) +
@@ -3808,7 +3808,7 @@ tSNE <- function(dataset, plotname = "", show_ellipse = F, ColPalette = "custom_
     base::merge(ClinicalData, by = "Sample")
 
   ## assign colors to the status variable
-  colors <- assign_colors(unique(dataset$Status),palette = ColPalette)
+  colors <- assign_colors(unique(dataset$Status))
 
   ## Making 2D score plot
   tSNEPlot2D <- ggplot2::ggplot(tSNEPlotData, ggplot2::aes(x = PlotDim1, y = PlotDim2, colour = Status)) +
@@ -5093,7 +5093,7 @@ SplineRegression <- function(dataset, PoIs, Timecol, alpha = 0.05, split_status 
 
 
   # Generate output plot
-  colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)),palette = col_pellet)
+  colors <- assign_colors(unique(dataset %>% arrange(Status) %>% pull(Status)))
 
   ## Initialize ggplot
   ## Global Spline
