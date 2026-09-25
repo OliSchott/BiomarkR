@@ -3,8 +3,8 @@ Title: Easy to use framework for proteomic data analysis.
 Version: 1.0.0.0
 Authors@R: 
     person("Oli", "Schott", , "oliver.schott@childrens.harvard.edu", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: Easy to use function for biomarker discovery in porteomics data.
+           comment = c(ORCID = "0009-0005-9740-7978"))
+Description: Easy to use functions for biomarker discovery in porteomics data.
 Imports: 
     BiocGenerics,
     caret,
