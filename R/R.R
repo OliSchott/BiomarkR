@@ -242,7 +242,7 @@ GenerateSampleIDsFromFilePath <- function(filepath){
   ## Populate Sample frame
   SampleFrame <- cbind(SampleIDs,dataset)
   ## Rename column to "Sample ID"
-  colnames(SampleFrame)[1] <- "Sample ID"
+  colnames(SampleFrame)[1] <- "Sample"
   ## write excel readable file into working directory
   write_excel_csv(SampleFrame, file = paste(docname,"with Sample","IDs.csv"))
   ## confirm that everything went ok
@@ -3222,25 +3222,107 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
   }
 
 
-  # Generate annotation colors and create annotation list dynamically
   annotation_list <- list()
   annotation_colors <- list()
 
-  annotation_columns <- c("Status", Annotations)
+  annotation_columns <- unique(c("Status", Annotations))
 
-  ## Generate palette for every annotation column
+  # Store continuous annotations for later
+  continuous_annotations <- list()
+
+  # Store categorical levels
+  categorical_levels <- list()
+
+
+  # ==========================================================
+  # 1. Identify categorical vs continuous annotations
+  # ==========================================================
+
   for (col_name in annotation_columns) {
-    annotation_levels <- unique(HeatMapDataClin[[col_name]])
-    colors <- generate_annotation_colors(annotation_levels)
-    annotation_list[[col_name]] <- HeatMapDataClin[[col_name]]
-    annotation_colors[[col_name]] <- colors
+
+    values <- HeatMapDataClin[[col_name]]
+
+    annotation_list[[col_name]] <- values
+
+    if (is.numeric(values)) {
+
+      continuous_annotations[[col_name]] <- values
+
+    } else {
+
+      categorical_levels[[col_name]] <- unique(
+        values[!is.na(values)]
+      )
+    }
   }
 
-  # Create the annotation object
+
+  # ==========================================================
+  # 2. Generate ALL categorical colors in one go
+  # ==========================================================
+
+  all_categorical_levels <- unlist(categorical_levels, use.names = FALSE)
+
+  all_colors <- assign_colors(all_categorical_levels)
+
+
+  # ==========================================================
+  # 3. Split colors back into their annotations
+  # ==========================================================
+
+  color_index <- 1
+
+  for (col_name in names(categorical_levels)) {
+
+    levels <- categorical_levels[[col_name]]
+
+    n_levels <- length(levels)
+
+    colors <- all_colors[
+      color_index:(color_index + n_levels - 1)
+    ]
+
+    names(colors) <- levels
+
+    annotation_colors[[col_name]] <- colors
+
+    color_index <- color_index + n_levels
+  }
+
+
+  # ==========================================================
+  # 4. Generate continuous annotation colors
+  # ==========================================================
+
+  for (col_name in names(continuous_annotations)) {
+
+    values <- continuous_annotations[[col_name]]
+
+    finite_values <- values[is.finite(values)]
+
+    q <- quantile(
+      finite_values,
+      probs = c(0.05, 0.95),
+      na.rm = TRUE
+    )
+
+    annotation_colors[[col_name]] <- circlize::colorRamp2(
+      q,
+      c(contColors[1], contColors[2])
+    )
+  }
+
+
+  # ==========================================================
+  # 5. Create annotation object
+  # ==========================================================
+
   Annotation <- ComplexHeatmap::HeatmapAnnotation(
-    df = annotation_list,
-    col = annotation_colors
+    df = as.data.frame(annotation_list),
+    col = annotation_colors,
+    na_col = "grey90"
   )
+
 
   if (tolower(method) == "supervised") {
     column_split <- HeatMapDataClin$Status
@@ -3300,7 +3382,6 @@ HeatMap <- function(dataset, PoIs, method = "unsupervised", clustDist = "euclide
 
   return(HeatMapPlot)
 }
-
 
 ## PCA
 ## The Function selects Proteins in the combined clinical and quantitative dataframe based on
