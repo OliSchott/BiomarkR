@@ -4,7 +4,13 @@
 \alias{ANOVA}
 \title{ANOVA}
 \usage{
-ANOVA(dataset, plotname = "", covariates = NULL)
+ANOVA(
+  dataset,
+  plotname = "",
+  covariates = NULL,
+  p.adj.method = "BH",
+  formula = NULL
+)
 }
 \arguments{
 \item{dataset}{The dataset to be tested}
@@ -12,9 +18,13 @@ ANOVA(dataset, plotname = "", covariates = NULL)
 \item{plotname}{The name to be displayed on created plots}
 
 \item{covariates}{A character vector of covariates to be included in the model. Example: c("Age","Sex")> Adding covariates will perform a Type III Multi-way ANOVA}
+
+\item{p.adj.method}{The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")}
+
+\item{formula}{An optional custom formula to be used for the ANOVA. If not provided, the function will automatically generate a formula based on the provided covariates and the "Status" variable. This function will not include interaction terms}
 }
 \value{
-A list object containing the results of the ANOVA, the significant features and a volcano plot
+A list object containing the results of the ANOVA, the significant features, a volcano plot of the ANOVA results for the Status Term, marginal means for the levels in the Status Term, and the significant marginal means for the levels in the Status Term
 }
 \description{
 This function performs differential expression analysis using an ANOVA.

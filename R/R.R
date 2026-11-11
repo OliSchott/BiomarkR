@@ -150,7 +150,9 @@ SampleRandomization <- function(df, group_vars, IDColumn) {
       ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 0, hjust = 1)) +
       ggplot2::labs(title = paste("Plate", i), x = "Column", y = "Row") +
       ## make x axis display every value and put x-axis on top
-      ggplot2::scale_x_continuous(breaks = 1:12, position = "top")
+      ggplot2::scale_x_continuous(breaks = 1:12, position = "top") +
+      ## add boxes around the plots
+      ggplot2::theme(panel.border = ggplot2::element_rect(colour = "black", fill = NA, size = 1))
 
     ## store plot in results
     Results$Plots[paste("Plate", i)] <- list(Plot)
@@ -162,7 +164,9 @@ SampleRandomization <- function(df, group_vars, IDColumn) {
     ### Check for non-numeric columns in final_splits and make them factors
     dplyr::mutate(dplyr::across(where(is.character), as.factor)) %>%
     ## make the factor columns numeric
-    dplyr::mutate(dplyr::across(where(is.factor), as.numeric))
+    dplyr::mutate(dplyr::across(where(is.factor), as.numeric)) |>
+    ## make Plate a factor
+    dplyr::mutate(Plate = as.factor(Plate))
 
   ## create summary statistics for each plate
   Summary <- SummaryData %>%
@@ -190,9 +194,9 @@ SampleRandomization <- function(df, group_vars, IDColumn) {
     # Use sym to convert the string to a symbol, and !! to evaluate it in aes
     Histogram <- ggplot2::ggplot(SummaryData, ggplot2::aes(x = !!rlang::sym(group_vars[i]))) +
       ggplot2::facet_wrap(~Plate) +
-      ggplot2::geom_histogram(binwidth = 1, ggplot2::aes(fill = factor(Plate))) +
+      ggplot2::geom_histogram(binwidth = 1, ggplot2::aes(fill = Plate)) +
       ## add minimal theme
-      ggplot2::theme_minimal() +
+      ggplot2::theme_minimal(base_size = 20) +
       ## add boxes around the facets
       ggplot2::theme(panel.border = ggplot2::element_rect(colour = "black", fill = NA, size = 1)) +
       ## add p-value to title
@@ -698,7 +702,7 @@ assign_colors <- function(chars) {
 #' @param method The method to be used for imputation (mean, zero, half_min, median, knn, svd)
 #' @return The imputed dataset
 #' @export
-ImputeFeatureIntensity <- function(dataset, method = "knn"){
+ImputeFeatureIntensity <- function(dataset, method = "svd"){
 
 
   MissingValue <- base::sum(base::is.na(dataset$Intensity))
@@ -2194,11 +2198,11 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 #' @param dataset The dataset to be tested
 #' @param plotname The name to be displayed on created plots
 #' @param covariates A character vector of covariates to be included in the model. Example: c("Age","Sex")> Adding covariates will perform a Type III Multi-way ANOVA
-#' @return A list object containing the results of the ANOVA, the significant features and a volcano plot
+#' @param p.adj.method The method to be used for p-value adjustment ("BH", "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
+#' @param formula An optional custom formula to be used for the ANOVA. If not provided, the function will automatically generate a formula based on the provided covariates and the "Status" variable. This function will not include interaction terms
+#' @return A list object containing the results of the ANOVA, the significant features, a volcano plot of the ANOVA results for the Status Term, marginal means for the levels in the Status Term, and the significant marginal means for the levels in the Status Term
 #' @export
-ANOVA <- function(dataset, plotname= "", covariates = NULL){
-
-  options(contrasts = c("contr.sum", "contr.poly"))
+ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH", formula = NULL){
 
   ## Initializing Dataframe
   datasetANOVA <- dataset
@@ -2208,7 +2212,11 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL){
 
   ## Cheking if we are operating on Peptides or Proteins
   ## make formula, put stuts last
-  f <- stats::as.formula(paste("Intensity ~", paste(covariates, collapse = " + "), "+ Status"))
+  if(is.null(formula)){
+    f <- stats::as.formula(paste("Intensity ~", paste(covariates, collapse = " + "), "+ Status"))
+  } else {
+    f <- stats::as.formula(formula)
+  }
 
   PoIs <- unique(dataset$Protein)
 
@@ -2216,25 +2224,39 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL){
   ## Running the ANOVA
   for(i in 1:length(PoIs)){
     PoI <- PoIs[i]
-    model <- stats::lm(f, data = datasetANOVA[datasetANOVA$Protein == PoIs[i],])
-    ANOVA <- car::Anova(model, type = 3)
-    ## put modelsum in list
-    Models[[PoI]] <- ANOVA
+
+    modeldata <- datasetANOVA |> dplyr::filter(Protein == PoI)
+
+    model <- stats::lm(f, data = modeldata,
+                       ## set contrast for type 3 ANOVA
+                       contrasts = list(Status = "contr.sum"))
+
+    ## save model for later
+    Models[[PoI]]$lm <- model
+
+    ## Type 3 ANOVA
+    ANOVA <- car::Anova(model, type = 3, test.statistic = "F")
+    ## save ANOVA-Resutls in list
+    Models[[PoI]]$ANOVA <- ANOVA
   }
 
   ## extracting the terms and p values from the ANOVA results
   ANOVAResults <- data.frame()
   for(i in 1:length(PoIs)){
-    ANOVAResults <- rbind(ANOVAResults, data.frame(Protein = PoIs[i], Term = rownames(Models[[PoIs[i]]]),                                          SumSq = Models[[PoIs[i]]]$`Sum Sq`,
-                                                   Df = Models[[PoIs[i]]]$Df,                                          Fvalue = Models[[PoIs[i]]]$`F value`,
-                                                   pValue = Models[[PoIs[i]]]$`Pr(>F)`))
+    ANOVAResults <- rbind(ANOVAResults, data.frame(
+      Protein = PoIs[i],
+      Term = rownames(Models[[PoIs[i]]]$ANOVA),
+      SumSq = Models[[PoIs[i]]]$ANOVA$`Sum Sq`,
+      Df = Models[[PoIs[i]]]$ANOVA$Df,
+      Fvalue = Models[[PoIs[i]]]$ANOVA$`F value`,
+      pValue = Models[[PoIs[i]]]$ANOVA$`Pr(>F)`))
   }
 
   ## filter for relevant terms
   ANOVAResults <- ANOVAResults |>
     dplyr::filter(!Term %in% c("(Intercept)", "Residuals")) |>
     dplyr::group_by(Term) |>
-    dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = "BH")) |>
+    dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = p.adj.method)) |>
     dplyr::ungroup()
 
   ## get number of significant terms per protein (for plotting)
@@ -2247,7 +2269,7 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL){
 
   ## Make Volcano Plot
   PlotData <- ANOVAResults |>
-    dplyr::filter(grepl("Status", Term)) |>
+    dplyr::filter(Term == "Status") |>
     dplyr::left_join(Nterms, by = "Protein") |>
     dplyr::mutate(Significant = ifelse(adjPValue < 0.05, "Significant", "Not Significant")) |>
     dplyr::mutate(Gene = stringr::str_split_i(Protein, "_", 2))
@@ -2279,15 +2301,64 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL){
     ## chage fill color to viridis
     ggplot2::scale_fill_brewer(palette = "Accent")
 
+  ## Calcualte marginal means for each protein and each Status
+  PoIsANOVA <- ANOVAResults |> dplyr::filter(Term == "Status") |> dplyr::filter(adjPValue < 0.05) |> dplyr::pull(Protein) |> unique()
+
+  ## if no significant proteins, return empty dataframe
+
+  if(length(PoIsANOVA) > 0){
+
+    EMMResults <- data.frame()
+
+    for(i in 1:length(PoIsANOVA)){
+      PoI <- PoIsANOVA[i]
+
+      ## retrieve the model for the protein
+      model <- Models[[PoI]]$lm
+
+      ## calculate estimated marginal means for the protein
+      emmeans <- emmeans::emmeans(model, ~ Status)
+      ## calculate pairwise contrasts for the protein
+      contrast <- emmeans::contrast(emmeans, method = "pairwise")
+      ## summarize the contrasts
+      summary <- summary(contrast)
+
+      ## save the results in a dataframe
+      EMMResults <- rbind(EMMResults, data.frame(
+        Protein = PoI,
+        contrast = summary$contrast,
+        estimate = summary$estimate,
+        SE = summary$SE,
+        df = summary$df,
+        t.ratio = summary$t.ratio,
+        p.value = summary$p.value))
+    }
+
+    ## NOTE: emmeans uses tukey method for family wise p-value adjustment by default,
+    ## so we don't need to adjust the p-values here
+
+    ## summarise terms
+    SigTermsMarginal <- EMMResults %>%
+      filter(p.value < 0.05)
+  }else{
+
+    EMMResults <- NULL
+    SigTermsMarginal <- NULL
+
+  }
+
   ## Preparing Output object
   Output <- list()
 
   Output$raw <- ANOVAResults
   Output$plot <- Volcanoplot
   Output$significant <- ANOVAResults |> dplyr::filter(adjPValue < 0.05)
+  Output$EMM <- if(exists("EMMResults")) EMMResults else NULL
+  Output$SigTermsMarginal <- if(exists("SigTermsMarginal")) SigTermsMarginal else NULL
 
 
   return(Output)
+
 }
 
 ## LIMMA

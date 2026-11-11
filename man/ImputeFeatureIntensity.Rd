@@ -4,7 +4,7 @@
 \alias{ImputeFeatureIntensity}
 \title{ImputeFeatureIntensity}
 \usage{
-ImputeFeatureIntensity(dataset, method = "knn")
+ImputeFeatureIntensity(dataset, method = "svd")
 }
 \arguments{
 \item{dataset}{The dataset to be imputed}
