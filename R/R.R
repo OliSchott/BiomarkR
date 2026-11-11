@@ -43,6 +43,7 @@
 #' @import BiocGenerics
 #' @import logistf
 #' @import mgcv
+#' @import emmeans
 
 ## Data Import and Management
 ## add roxygen comments
