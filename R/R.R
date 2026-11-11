@@ -2203,7 +2203,7 @@ FisherTest <- function(dataset, p.adjust.method = "BH"){
 #' @param formula An optional custom formula to be used for the ANOVA. If not provided, the function will automatically generate a formula based on the provided covariates and the "Status" variable. This function will not include interaction terms
 #' @return A list object containing the results of the ANOVA, the significant features, a volcano plot of the ANOVA results for the Status Term, marginal means for the levels in the Status Term, and the significant marginal means for the levels in the Status Term
 #' @export
-ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH", formula = NULL){
+ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH", formula = NULL, contrast = "contr.poly"){
 
   ## Initializing Dataframe
   datasetANOVA <- dataset
@@ -2222,22 +2222,42 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH",
   PoIs <- unique(dataset$Protein)
 
   Models <- list()
+
+  ## assign contrasts for the Status variable and any covariates
+  contrast_list <- list(Status = "contr.sum")
+
+  if(!is.null(covariates)){
+    for(cov in covariates){
+      # Note: Only apply this if the covariates are ordered factors, not numeric
+      if(is.ordered(datasetANOVA[[cov]])){
+      contrast_list[[cov]] <- "contr.poly"
+      }
+      ## if covariate is not ordered factor, use contr.sum
+      if(!is.ordered(datasetANOVA[[cov]])){
+        contrast_list[[cov]] <- "contr.sum"
+      }
+      ## if numeric covariate, do not set contrast
+      if(is.numeric(datasetANOVA[[cov]])){
+        contrast_list[[cov]] <- NULL
+      }
+    }
+  }
+
   ## Running the ANOVA
   for(i in 1:length(PoIs)){
     PoI <- PoIs[i]
-
     modeldata <- datasetANOVA |> dplyr::filter(Protein == PoI)
 
-    model <- stats::lm(f, data = modeldata,
-                       ## set contrast for type 3 ANOVA
-                       contrasts = list(Status = "contr.sum"))
+    # Pass the pre-built contrast_list
+    model <- stats::lm(f, data = modeldata, contrasts = contrast_list)
 
     ## save model for later
     Models[[PoI]]$lm <- model
 
     ## Type 3 ANOVA
     ANOVA <- car::Anova(model, type = 3, test.statistic = "F")
-    ## save ANOVA-Resutls in list
+
+    ## save ANOVA-Results in list
     Models[[PoI]]$ANOVA <- ANOVA
   }
 
@@ -2253,12 +2273,10 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH",
       pValue = Models[[PoIs[i]]]$ANOVA$`Pr(>F)`))
   }
 
-  ## filter for relevant terms
+  ## filter for relevant terms and adjust p-values
   ANOVAResults <- ANOVAResults |>
     dplyr::filter(!Term %in% c("(Intercept)", "Residuals")) |>
-    dplyr::group_by(Term) |>
-    dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = p.adj.method)) |>
-    dplyr::ungroup()
+    dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = p.adj.method))
 
   ## get number of significant terms per protein (for plotting)
   Nterms <- ANOVAResults |>
