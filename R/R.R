@@ -2358,7 +2358,7 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH",
 
     ## summarise terms
     SigTermsMarginal <- EMMResults %>%
-      filter(p.value < 0.05)
+      dplyr::filter(p.value < 0.05)
   }else{
 
     EMMResults <- NULL
