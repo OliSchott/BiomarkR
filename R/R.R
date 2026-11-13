@@ -2276,6 +2276,7 @@ ANOVA <- function(dataset, plotname= "", covariates = NULL, p.adj.method = "BH",
   ## filter for relevant terms and adjust p-values
   ANOVAResults <- ANOVAResults |>
     dplyr::filter(!Term %in% c("(Intercept)", "Residuals")) |>
+    group_by(Term) |>
     dplyr::mutate(adjPValue = stats::p.adjust(pValue, method = p.adj.method))
 
   ## get number of significant terms per protein (for plotting)
